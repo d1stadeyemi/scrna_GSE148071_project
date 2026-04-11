@@ -1,0 +1,8 @@
+__default__:
+  account:    "ACF-UTK0011"          
+  partition:  "campus"     
+  time:       "{resources.runtime}"
+  mem:        "{resources.mem_mb}MB"
+  cpus-per-task: "{threads}"
+  output:     "logs/slurm-%j.out"
+  error:      "logs/slurm-%j.err"
