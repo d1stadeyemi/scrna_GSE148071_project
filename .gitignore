@@ -23,7 +23,7 @@ __pycache__/
 # Conda
 .conda/
 
-# Cluster config (HPC-specific, not portable)
+# Cluster config (HPC-specific)
 config/cluster.yaml
 
 # Keep directory structure
