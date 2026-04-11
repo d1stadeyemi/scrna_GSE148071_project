@@ -1,0 +1,39 @@
+cat > .gitignore << 'EOF'
+# Large data files
+data/raw/*.tar
+data/raw/extracted/
+data/raw/inventory.txt
+
+# Generated outputs
+data/processed/
+data/metadata/
+results/figures/
+results/tables/
+
+# Logs
+logs/
+.snakemake/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# Conda
+.conda/
+
+# Cluster config (HPC-specific, not portable)
+config/cluster.yaml
+
+# Keep directory structure
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/metadata/.gitkeep
+!results/figures/.gitkeep
+!results/tables/.gitkeep
+!logs/.gitkeep
+!resources/.gitkeep
+!notebooks/.gitkeep
+!scripts/.gitkeep
+EOF

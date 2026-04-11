@@ -1,0 +1,10 @@
+geo:
+  accession: GSE148071
+  base_url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE148nnn/GSE148071/suppl/
+
+files:
+  raw_tar: GSE148071_RAW.tar
+  series_matrix: GSE148071_series_matrix.txt.gz
+
+paths:
+  raw_dir: data/raw
