@@ -3,7 +3,8 @@ configfile: "config/config.yaml"
 include: "rules/setup.smk"
 include: "rules/download.smk"
 include: "rules/parse.smk"
+include: "rules/qc.smk"
 
 rule all:
     input:
-        "data/processed/merged_raw.h5ad"   
+        "data/processed/qc_filtered.h5ad"   
