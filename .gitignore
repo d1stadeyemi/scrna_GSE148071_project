@@ -24,7 +24,7 @@ __pycache__/
 .conda/
 
 # Cluster config (HPC-specific)
-config/cluster.yaml
+config/slurm/
 
 # Keep directory structure
 !data/raw/.gitkeep

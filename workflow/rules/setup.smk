@@ -4,7 +4,7 @@ rule setup:
     threads: 1
     resources:
         mem_mb = 1000,
-        runtime = 10
+        runtime = 60
     shell:
         """
         mkdir -p config \

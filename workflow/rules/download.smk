@@ -2,7 +2,7 @@ rule download_raw_tar:
     input:
         "logs/.setup_done"         
     output:
-        "data/raw/GSE148071_RAW.tar"
+        f"{config['paths']['raw_dir']}/GSE148071_RAW.tar"
     params:
         url = config["geo"]["base_url"] + config["files"]["raw_tar"]
     threads: 2
@@ -13,7 +13,7 @@ rule download_raw_tar:
         "logs/download_raw_tar.log"
     shell:
         """
-        wget -q --show-progress -O {output} {params.url} 2> {log}
+        wget -q --show-progress -O {output} {params.url} > {log} 2>&1
         """
 
 rule extract_raw_tar:
