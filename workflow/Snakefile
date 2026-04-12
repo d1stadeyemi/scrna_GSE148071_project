@@ -4,7 +4,8 @@ include: "rules/setup.smk"
 include: "rules/download.smk"
 include: "rules/parse.smk"
 include: "rules/qc.smk"
+include: "rules/dimred.smk"
 
 rule all:
     input:
-        "data/processed/qc_filtered.h5ad"   
+        "data/processed/embedded.h5ad"   

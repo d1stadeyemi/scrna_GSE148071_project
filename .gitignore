@@ -26,6 +26,9 @@ __pycache__/
 # Cluster config (HPC-specific)
 config/slurm/
 
+# scVI model artifacts
+models/
+
 # Keep directory structure
 !data/raw/.gitkeep
 !data/processed/.gitkeep
@@ -36,4 +39,5 @@ config/slurm/
 !resources/.gitkeep
 !notebooks/.gitkeep
 !scripts/.gitkeep
+!models/.gitkeep
 EOF

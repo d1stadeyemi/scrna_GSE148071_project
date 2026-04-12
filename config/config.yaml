@@ -14,3 +14,11 @@ qc:
   max_genes:  6000    # remove likely doublets
   max_pct_mt: 25.0    # remove dying cells (paper uses ~25%)
   min_cells:  3       # remove genes expressed in fewer than 3 cells
+
+dimred:
+  n_hvgs:      3000    # HVGs for scVI input
+  n_pcs:       50      # PCA components
+  n_latent:    30      # scVI latent dimensions
+  n_epochs:    400     # max training epochs (early stopping active)
+  batch_size:  128     # scVI minibatch size
+  n_neighbors: 15      # neighborhood graph for UMAP
