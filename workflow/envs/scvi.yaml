@@ -18,3 +18,5 @@ dependencies:
   - seaborn
   - leidenalg
   - python-igraph
+  - scikit-misc        
+  - numba              

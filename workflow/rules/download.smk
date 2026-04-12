@@ -40,3 +40,43 @@ rule inventory_files:
         """
         find data/raw/extracted -type f | sort > {output} 2> {log}
         """
+
+rule download_series_matrix:
+    input:
+        "logs/.setup_done"
+    output:
+        "data/metadata/GSE148071_series_matrix.txt.gz"
+    params:
+        url = config["geo"]["matrix_url"]
+    threads: 1
+    resources:
+        mem_mb  = 2000,
+        runtime = 20
+    log:
+        "logs/download_series_matrix.log"
+    shell:
+        """
+        wget -q --show-progress \
+            -O {output} \
+            {params.url} \
+            2>&1 | tee {log}
+        """
+
+rule parse_series_matrix:
+    input:
+        "data/metadata/GSE148071_series_matrix.txt.gz"
+    output:
+        "data/metadata/sample_metadata.tsv"
+    threads: 1
+    resources:
+        mem_mb  = 4000,
+        runtime = 10
+    log:
+        "logs/parse_series_matrix.log"
+    shell:
+        """
+        python scripts/parse_metadata.py \
+            --input  {input} \
+            --output {output} \
+            2>&1 | tee {log}
+        """

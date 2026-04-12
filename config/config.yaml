@@ -1,6 +1,7 @@
 geo:
   accession: GSE148071
   base_url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE148nnn/GSE148071/suppl/
+  matrix_url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE148nnn/GSE148071/matrix/GSE148071_series_matrix.txt.gz
 
 files:
   raw_tar: GSE148071_RAW.tar
@@ -11,8 +12,8 @@ paths:
 
 qc:
   min_genes:  200     # remove empty/dying cells
-  max_genes:  6000    # remove likely doublets
-  max_pct_mt: 25.0    # remove dying cells (paper uses ~25%)
+  max_genes:  5000    # remove likely doublets (according to the publication)
+  max_pct_mt: 30      # remove dying cells (according to the publication)
   min_cells:  3       # remove genes expressed in fewer than 3 cells
 
 dimred:

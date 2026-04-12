@@ -22,21 +22,21 @@
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/<your-username>/<repo-name>.git
-cd <repo-name>
+git clone https://github.com/d1stadeyemi/scrna_GSE148071_project.git
+cd scrna_GSE148071_project
 
 # 2. Set up the base conda environment
 conda env create -f workflow/envs/base.yaml
 conda activate scrna-nsclc
 
-# 3. Configure cluster profile (edit as needed for your HPC)
-cp config/cluster_template.yaml config/cluster.yaml
+# 3. Configure cluster profile
+cp config/cluster_template.yaml config/slurm/config.yaml
 
 # 4. Dry run to validate the workflow
-snakemake --profile config/cluster.yaml -n
+snakemake --profile config/slurm/config.yaml -n
 
 # 5. Execute the full pipeline
-snakemake --profile config/cluster.yaml --cores all
+snakemake --profile config/slurm/config.yaml --cores all
 ```
 
 > **Note:** GEO data download is handled automatically by the pipeline (Stage 1). No manual data preparation is required.
@@ -45,7 +45,7 @@ snakemake --profile config/cluster.yaml --cores all
 
 ## Project Overview
 
-This repository reproduces the core single-cell RNA-seq analyses from Wu et al. (2021), a landmark study profiling tumor heterogeneity and the tumor microenvironment (TME) in advanced non-small cell lung cancer (NSCLC).
+This repository reproduces the core single-cell RNA-seq analyses from Wu et al. (2021), a study profiling tumor heterogeneity and the tumor microenvironment (TME) in advanced non-small cell lung cancer (NSCLC).
 
 The pipeline is implemented from scratch in Python using the **Scanpy ecosystem**, translating the original Seurat-based workflow. It is fully automated via **Snakemake** and designed for execution on an **HPC cluster**.
 

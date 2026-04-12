@@ -8,4 +8,5 @@ include: "rules/dimred.smk"
 
 rule all:
     input:
-        "data/processed/embedded.h5ad"   
+        "data/processed/embedded.h5ad",   
+        
