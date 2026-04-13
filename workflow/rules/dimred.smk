@@ -40,9 +40,7 @@ rule scvi_integrate:
     threads: 8
     resources:
         mem_mb         = 64000,
-        runtime        = 120,
-        slurm_extra    = "'--gres=gpu:1'",   # request 1 GPU
-        slurm_partition = "campus-gpu-large"  # override default partition
+        runtime        = 360,
     conda:
         "../envs/scvi.yaml"
     log:

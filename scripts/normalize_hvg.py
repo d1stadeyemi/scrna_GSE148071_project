@@ -66,21 +66,31 @@ def main(input_path, output_path, figures_dir, n_hvgs, n_pcs):
     n_hvg_found = adata.var["highly_variable"].sum()
     log.info(f"  HVGs selected: {n_hvg_found:,}")
 
-    # ── Plot HVG dispersion ───────────────────────────────────────────────────
+    # ── Plot HVG selection summary ────────────────────────────────────────────
     os.makedirs(figures_dir, exist_ok=True)
+
     fig, ax = plt.subplots(figsize=(8, 5))
+    hvg_mask = adata.var["highly_variable"]
+    colors = hvg_mask.map({True: "tomato", False: "lightgrey"})
     ax.scatter(
-        adata.var["means"],
-        adata.var["dispersions_norm"],
-        c     = adata.var["highly_variable"].map({True: "tomato", False: "lightgrey"}),
+        range(adata.n_vars),
+        adata.var["mean_counts"].values,
+        c     = colors.values,
         s     = 1,
         alpha = 0.5,
     )
-    ax.set_xlabel("Mean expression")
-    ax.set_ylabel("Normalized dispersion")
-    ax.set_title(f"Highly variable genes (n={n_hvg_found:,} in red)")
+    ax.set_xlabel("Gene rank (by mean expression)")
+    ax.set_ylabel("Mean counts")
+    ax.set_title(f"HVG selection: {hvg_mask.sum():,} HVGs (red) / {adata.n_vars:,} total genes")
+    from matplotlib.lines import Line2D
+    ax.legend(handles=[
+        Line2D([0],[0], marker='o', color='w', markerfacecolor='tomato',
+            markersize=6, label=f'HVG (n={hvg_mask.sum():,})'),
+        Line2D([0],[0], marker='o', color='w', markerfacecolor='lightgrey',
+            markersize=6, label='Other genes'),
+    ])
     plt.tight_layout()
-    plt.savefig(os.path.join(figures_dir, "hvg_dispersion.pdf"), dpi=150)
+    plt.savefig(os.path.join(figures_dir, "hvg_selection.pdf"), dpi=150)
     plt.close()
 
     # ── PCA ──────────────────────────────────────────────────────────────────
