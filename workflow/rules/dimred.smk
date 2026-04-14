@@ -37,10 +37,10 @@ rule scvi_integrate:
         n_latent   = config["dimred"]["n_latent"],
         n_epochs   = config["dimred"]["n_epochs"],
         batch_size = config["dimred"]["batch_size"],
-    threads: 8
+    threads: 16
     resources:
         mem_mb         = 64000,
-        runtime        = 360,
+        runtime        = 600
     conda:
         "../envs/scvi.yaml"
     log:

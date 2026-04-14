@@ -73,7 +73,7 @@ def main(input_path, output_path, model_dir,
     )
 
     log.info("Training complete.")
-    log.info(f"  Final ELBO: {model.history['elbo_train'][-1]:.4f}")
+    log.info(f"  Final ELBO: {model.history['elbo_train'].values[-1]}")
 
     # ── Extract latent representation ─────────────────────────────────────────
     log.info("Extracting scVI latent representation...")
