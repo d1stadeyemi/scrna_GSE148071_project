@@ -10,7 +10,7 @@ Output: data/processed/annotated.h5ad
 Steps:
 - Leiden clustering at multiple resolutions
 - Marker gene scoring per cluster
-- Cell type annotation using paper's canonical markers
+- Cell type annotation using paper's canonical markers.
 - Reproduce Fig. 1b, 1c, 1d, 1e.
 """
 
