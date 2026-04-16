@@ -3,8 +3,7 @@ rule cluster_annotate:
         h5ad = "data/processed/embedded.h5ad"
     output:
         h5ad    = "data/processed/annotated.h5ad",
-        figures = directory("results/figures/annotation"),
-        tables  = directory("results/tables/annotation")
+        figures = directory("results/figures/annotation")
     params:
         resolution = config["annotation"]["resolution"],
         tables_dir = "results/tables"

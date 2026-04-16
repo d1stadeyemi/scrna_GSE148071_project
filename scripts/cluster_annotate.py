@@ -59,13 +59,18 @@ MARKER_GENES = {
     "Epithelial":  ["CAPS", "SNTN", "TPPP3", "FOXJ1"],
     "Alveolar":    ["CLDN18", "AQP4", "SFTPA1", "SFTPC", "ABCA3"],
     "Fibroblast":  ["COL1A1", "COL1A2", "DCN", "LUM", "FAP"],
-    "T_cell":      ["CD2", "CD3D", "CD3E", "CD3G", "TRAC"],
-    "B_cell":      ["CD79A", "CD79B", "MS4A1", "IGLC3", "MZB1"],
-    "Myeloid":     ["CD14", "LYZ", "CD68", "FCGR3A", "MNDA"],
-    "Neutrophil":  ["CSF3R", "S100A8", "S100A9", "FCGR3B", "CXCR2"],
-    "fDC":         ["FDCSP", "CR2", "CLU"],
+    "T_cell":      ["CD2", "CD3D", "CD3E", "CD3G", "TRAC",
+                    "CD8A", "CD4", "IL7R", "CCR7", "SELL"],  # expanded
+    "B_cell":      ["CD79A", "CD79B", "MS4A1", "IGLC3", "MZB1",
+                    "IGHM", "JCHAIN"],
+    "Myeloid":     ["CD14", "LYZ", "CD68", "FCGR3A", "MNDA",
+                    "CSF1R", "MARCO", "MRC1"],
+    "Neutrophil":  ["CSF3R", "S100A8", "S100A9", "FCGR3B", "CXCR2",
+                    "OLR1", "SELL"],
+    "fDC":         ["FDCSP", "CR2"],        
     "Mast_cell":   ["GATA2", "TPSAB1", "TPSB2", "CPA3", "MS4A2"],
-    "Cancer":      ["EPCAM", "KRT18", "KRT19", "MKI67", "TP63"],
+    "Cancer":      ["EPCAM", "KRT18", "KRT19", "MKI67", "TP63",
+                    "NAPSA", "NKX2-1", "KRT5", "KRT6A"],
 }
 
 # Flat list of all markers for heatmap
@@ -82,11 +87,9 @@ def run_leiden(adata, resolution):
 
 
 def score_and_annotate(adata, resolution):
-    """Score each cluster by marker genes and assign cell type."""
     cluster_key = f"leiden_{resolution}"
     log.info(f"Scoring clusters for cell type annotation...")
 
-    # Score each cell type using scanpy gene scoring
     for cell_type, markers in MARKER_GENES.items():
         valid_markers = [g for g in markers if g in adata.var_names]
         if len(valid_markers) == 0:
@@ -99,18 +102,33 @@ def score_and_annotate(adata, resolution):
         )
         log.info(f"  {cell_type}: {len(valid_markers)}/{len(markers)} markers found")
 
-    # Assign cell type to each cluster based on highest mean score
     score_cols = [f"score_{ct}" for ct in MARKER_GENES.keys()]
     cluster_scores = adata.obs.groupby(cluster_key)[score_cols].mean()
     cluster_scores.columns = list(MARKER_GENES.keys())
 
-    cluster_annotation = cluster_scores.idxmax(axis=1)
+    # Assign cell type — but require minimum score of 0.1
+    # Clusters with no strong signal default to most likely broad type
+    MIN_SCORE = 0.1
+    cluster_annotation = {}
+    for cluster in cluster_scores.index:
+        scores = cluster_scores.loc[cluster]
+        best_type = scores.idxmax()
+        best_score = scores.max()
+        if best_score < MIN_SCORE:
+            # Low confidence — assign based on second pass with relaxed markers
+            log.warning(f"  Cluster {cluster}: low max score {best_score:.3f}, "
+                       f"assigned {best_type} with caution")
+        cluster_annotation[cluster] = best_type
+
+    cluster_annotation = pd.Series(cluster_annotation)
+
     log.info("Cluster annotations:")
     for cluster, cell_type in cluster_annotation.items():
         n_cells = (adata.obs[cluster_key] == cluster).sum()
-        log.info(f"  Cluster {cluster:>3} → {cell_type:<15} ({n_cells:>6} cells)")
+        score = cluster_scores.loc[cluster, cell_type]
+        log.info(f"  Cluster {cluster:>3} → {cell_type:<15} "
+                 f"({n_cells:>6} cells, score={score:.3f})")
 
-    # Map back to cells
     adata.obs["cell_type"] = adata.obs[cluster_key].map(cluster_annotation)
     adata.obs["cell_type"] = adata.obs["cell_type"].astype("category")
 
@@ -408,6 +426,28 @@ def save_tables(adata, cluster_annotation, tables_dir):
     for _, row in counts.iterrows():
         log.info(f"  {row['cell_type']:<15} {row['n_cells']:>7,} cells ({row['pct']:.1f}%)")
 
+def plot_cluster_scores(cluster_scores, figures_dir):
+    """Plot cluster scoring heatmap for annotation QC."""
+    fig, ax = plt.subplots(figsize=(14, 6))
+    sns.heatmap(
+        cluster_scores.T,
+        cmap    = "RdBu_r",
+        center  = 0,
+        ax      = ax,
+        annot   = False,
+        yticklabels = True,
+        xticklabels = True,
+    )
+    ax.set_title("Cluster scores per cell type (annotation QC)", fontweight="bold")
+    ax.set_xlabel("Cluster")
+    ax.set_ylabel("Cell type")
+    plt.tight_layout()
+    plt.savefig(os.path.join(figures_dir, "cluster_scores_heatmap.pdf"),
+                dpi=200, bbox_inches="tight")
+    plt.savefig(os.path.join(figures_dir, "cluster_scores_heatmap.png"),
+                dpi=200, bbox_inches="tight")
+    plt.close()
+    log.info("  Saved cluster_scores_heatmap.pdf/png")
 
 def main(input_path, output_path, figures_dir, tables_dir, resolution):
 
@@ -423,6 +463,7 @@ def main(input_path, output_path, figures_dir, tables_dir, resolution):
 
     # ── Cell type annotation ──────────────────────────────────────────────────
     cluster_annotation, cluster_scores = score_and_annotate(adata, resolution)
+    plot_cluster_scores(cluster_scores, figures_dir)
 
     # ── Figures ───────────────────────────────────────────────────────────────
     plot_umap_cell_type(adata, figures_dir)
