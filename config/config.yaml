@@ -23,3 +23,6 @@ dimred:
   n_epochs:    400     # max training epochs (early stopping active)
   batch_size:  128     # scVI minibatch size
   n_neighbors: 15      # neighborhood graph for UMAP
+
+annotation:
+  resolution: 1.0      # paper used resolution 1.0 in Seurat FindClusters
