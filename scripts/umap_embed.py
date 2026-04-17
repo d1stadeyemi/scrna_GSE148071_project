@@ -30,7 +30,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-def main(input_path, output_path, figures_dir, n_neighbors, n_pcs):
+def main(input_path, output_path, figures_dir, n_neighbors, n_pcs, use_rep):
 
     log.info(f"Loading {input_path}...")
     adata = sc.read_h5ad(input_path)
@@ -40,11 +40,11 @@ def main(input_path, output_path, figures_dir, n_neighbors, n_pcs):
     log.info(f"Building neighborhood graph (n_neighbors={n_neighbors})...")
     sc.pp.neighbors(
         adata,
-        use_rep    = "X_scvi",   # use scVI latent, not PCA
+        use_rep     = use_rep,
         n_neighbors = n_neighbors,
-        n_pcs       = n_pcs,
+        n_pcs       = n_pcs if use_rep == "X_pca" else None,
     )
-
+    
     # ── UMAP ──────────────────────────────────────────────────────────────────
     log.info("Computing UMAP embedding...")
     sc.tl.umap(adata)
@@ -94,5 +94,7 @@ if __name__ == "__main__":
     parser.add_argument("--figures_dir", default="results/figures/umap")
     parser.add_argument("--n_neighbors", type=int, default=15)
     parser.add_argument("--n_pcs",       type=int, default=30)
+    parser.add_argument("--use_rep", default="X_pca",
+                        help="Embedding to use for neighbor graph. 'X_pca' or 'X_scvi'")
     args = parser.parse_args()
-    main(args.input, args.output, args.figures_dir, args.n_neighbors, args.n_pcs)
+    main(args.input, args.output, args.figures_dir, args.n_neighbors, args.n_pcs, args.use_rep)

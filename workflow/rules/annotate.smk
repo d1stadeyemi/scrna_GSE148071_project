@@ -1,9 +1,9 @@
 rule cluster_annotate:
     input:
-        h5ad = "data/processed/embedded.h5ad"
+        h5ad = "data/processed/{track}/embedded.h5ad"
     output:
-        h5ad    = "data/processed/annotated.h5ad",
-        figures = directory("results/figures/annotation")
+        h5ad    = "data/processed/{track}/annotated.h5ad",
+        figures = directory("results/figures/{track}/annotation")
     params:
         resolution = config["annotation"]["resolution"],
         tables_dir = "results/tables"
@@ -14,7 +14,7 @@ rule cluster_annotate:
     conda:
         "../envs/scvi.yaml"
     log:
-        "logs/cluster_annotate.log"
+        "logs/{track}/cluster_annotate.log"
     shell:
         """
         python scripts/cluster_annotate.py \

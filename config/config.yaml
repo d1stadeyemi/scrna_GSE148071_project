@@ -16,13 +16,23 @@ qc:
   max_pct_mt: 30      # remove dying cells (according to the publication)
   min_cells:  3       # remove genes expressed in fewer than 3 cells
 
-dimred:
-  n_hvgs:      3000    # HVGs for scVI input
-  n_pcs:       50      # PCA components
-  n_latent:    30      # scVI latent dimensions
-  n_epochs:    400     # max training epochs (early stopping active)
-  batch_size:  128     # scVI minibatch size
-  n_neighbors: 15      # neighborhood graph for UMAP
+# Track A — paper-faithful (no batch correction)
+paper_track:
+  n_hvgs:        600       # paper's exact value
+  hvg_flavor:    "seurat"  # paper's Seurat 2.3 method
+  n_pcs:         20        # paper uses first 20 PCs
+  n_neighbors:   15
+  batch_correct: false
+
+# Track B — modern best practice (scVI)
+alternative_track:
+  n_hvgs:        3000
+  hvg_flavor:    "seurat_v3"
+  n_latent:      30
+  n_epochs:      400
+  batch_size:    128
+  n_neighbors:   15
+  batch_correct: true
 
 annotation:
-  resolution: 1.0      # paper used resolution 1.0 in Seurat FindClusters
+  resolution: 1.0

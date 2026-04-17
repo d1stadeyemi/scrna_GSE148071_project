@@ -32,7 +32,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-def main(input_path, output_path, figures_dir, n_hvgs, n_pcs):
+def main(input_path, output_path, figures_dir, n_hvgs, n_pcs, hvg_flavor):
 
     log.info(f"Loading {input_path}...")
     adata = sc.read_h5ad(input_path)
@@ -53,15 +53,20 @@ def main(input_path, output_path, figures_dir, n_hvgs, n_pcs):
     # Store normalized+log1p in a layer for reference
     adata.layers["log1p_norm"] = adata.X.copy()
 
-    # ── Highly variable genes ─────────────────────────────────────────────────
-    log.info(f"Selecting top {n_hvgs} highly variable genes...")
-    sc.pp.highly_variable_genes(
-        adata,
+    # ── Highly variable genes ───────────────────────────────────────────────
+    log.info(f"Selecting top {n_hvgs} HVGs using flavor={hvg_flavor}...")
+
+    hvg_kwargs = dict(
         n_top_genes = n_hvgs,
-        batch_key   = "patient_id",   # account for patient batch during HVG selection
-        flavor      = "seurat_v3",
-        layer       = "counts",       # use raw counts for seurat_v3 method
+        flavor      = hvg_flavor,
     )
+
+    # Only required for seurat_v3
+    if hvg_flavor == "seurat_v3":
+        hvg_kwargs["batch_key"] = "patient_id"
+        hvg_kwargs["layer"]     = "counts"
+
+    sc.pp.highly_variable_genes(adata, **hvg_kwargs)
 
     n_hvg_found = adata.var["highly_variable"].sum()
     log.info(f"  HVGs selected: {n_hvg_found:,}")
@@ -132,5 +137,8 @@ if __name__ == "__main__":
     parser.add_argument("--figures_dir", default="results/figures/hvg_pca")
     parser.add_argument("--n_hvgs",      type=int, default=3000)
     parser.add_argument("--n_pcs",       type=int, default=50)
+    parser.add_argument("--hvg_flavor", default="seurat_v3",
+                    choices=["seurat", "seurat_v3", "cell_ranger"],
+                    help="HVG selection method. Use 'seurat' for paper-faithful (600 HVGs), 'seurat_v3' for modern (3000 HVGs)")
     args = parser.parse_args()
-    main(args.input, args.output, args.figures_dir, args.n_hvgs, args.n_pcs)
+    main(args.input, args.output, args.figures_dir, args.n_hvgs, args.n_pcs, args.hvg_flavor)

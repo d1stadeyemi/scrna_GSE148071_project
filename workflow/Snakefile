@@ -4,10 +4,13 @@ include: "rules/setup.smk"
 include: "rules/download.smk"
 include: "rules/parse.smk"
 include: "rules/qc.smk"
-include: "rules/dimred.smk"
+include: "rules/paper_track.smk"    # Track A — no batch correction
+include: "rules/alternative_track.smk"   # Track B — scVI
 include: "rules/annotate.smk"
 
 rule all:
     input:
-        "data/processed/annotated.h5ad" 
-        
+        # Track A is primary — according to the paper, this is the "main" analysis 
+        "data/processed/paper_track/annotated.h5ad",
+        # Track B is comparative — modern best practice with batch correction using scVI
+        "data/processed/alternative_track/annotated.h5ad"
