@@ -8,8 +8,8 @@ Steps:
 - Normalize total counts per cell (target sum 10,000)
 - Log1p transform
 - Select highly variable genes
-- PCA on HVG space
-- Store raw counts in adata.layers['counts'] for scVI
+- PCA on HVG space.
+- Store raw counts in adata.layers['counts'] for scVI.
 """
 
 import os
