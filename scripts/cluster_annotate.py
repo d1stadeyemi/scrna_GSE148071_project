@@ -1,5 +1,5 @@
 """
-Stage 5 — Leiden Clustering and Cell Type Annotation
+Stage 5 — Leiden Clustering and Cell Type Annotation.
 
 Input:  data/processed/embedded.h5ad
 Output: data/processed/annotated.h5ad
