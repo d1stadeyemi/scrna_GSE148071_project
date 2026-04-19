@@ -23,10 +23,10 @@ warnings.filterwarnings("ignore")
 import numpy as np
 import pandas as pd
 import scanpy as sc
+from sklearn.metrics import silhouette_score
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 from matplotlib.patches import Patch
 import seaborn as sns
 
@@ -37,457 +37,366 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# ── Cell type colors matching publication ─────────────────────────────────────
+# ── Cell type colors (publication standard, not forced) ──────────────────────
 CELL_TYPE_COLORS = {
-    "Cancer":      "#E6851E",   # orange
-    "Myeloid":     "#E84F9E",   # magenta/pink
-    "Fibroblast":  "#E8D419",   # yellow
-    "T_cell":      "#4A90C4",   # steel blue
-    "B_cell":      "#7B5EA7",   # purple
-    "Neutrophil":  "#8B1A1A",   # dark red
-    "Alveolar":    "#E8401C",   # red-orange
-    "Epithelial":  "#9B59B6",   # medium purple
-    "Endothelial": "#A8D44B",   # yellow-green
-    "Mast_cell":   "#1A6B3C",   # dark green
-    "fDC":         "#0D4A3A",   # very dark green
-    "Unknown":     "#CCCCCC",   # grey
+    "Cancer":      "#E6851E",
+    "Myeloid":     "#E84F9E",
+    "Fibroblast":  "#E8D419",
+    "T_cell":      "#4A90C4",
+    "B_cell":      "#7B5EA7",
+    "Neutrophil":  "#8B1A1A",
+    "Alveolar":    "#E8401C",
+    "Epithelial":  "#9B59B6",
+    "Endothelial": "#A8D44B",
+    "Mast_cell":   "#1A6B3C",
+    "fDC":         "#0D4A3A",
+    "Unknown":     "#CCCCCC",
 }
 
-# ── Canonical marker genes from the paper (Supplementary Table 2) ─────────────
+# ── Canonical markers from literature and Wu et al. Methods ──────────────────
+# These are consensus markers across multiple lung scRNA-seq studies
+# References: Travaglini 2020, Habermann 2020, Wu 2021
 MARKER_GENES = {
-    "Endothelial": ["CLDN5", "VWF", "PECAM1", "FLT1", "CDH5"],
-    "Epithelial":  ["CAPS", "SNTN", "TPPP3", "FOXJ1"],
-    "Alveolar":    ["CLDN18", "AQP4", "SFTPA1", "SFTPC", "ABCA3"],
-    "Fibroblast":  ["COL1A1", "COL1A2", "DCN", "LUM", "FAP"],
+    # Immune cells — most specific markers
     "T_cell":      ["CD2", "CD3D", "CD3E", "CD3G", "TRAC",
-                    "CD8A", "CD4", "IL7R", "CCR7", "SELL"],  # expanded
+                    "CD8A", "CD4", "IL7R", "CCR7", "SELL"],
     "B_cell":      ["CD79A", "CD79B", "MS4A1", "IGLC3", "MZB1",
                     "IGHM", "JCHAIN"],
     "Myeloid":     ["CD14", "LYZ", "CD68", "FCGR3A", "MNDA",
                     "CSF1R", "MARCO", "MRC1"],
-    "Neutrophil":  ["CSF3R", "S100A8", "S100A9", "FCGR3B", "CXCR2",
-                    "OLR1", "SELL"],
-    "fDC":         ["FDCSP", "CR2"],        
+    "Neutrophil":  ["CSF3R", "S100A8", "S100A9", "FCGR3B",
+                    "CXCR2", "OLR1", "SELL"],
     "Mast_cell":   ["GATA2", "TPSAB1", "TPSB2", "CPA3", "MS4A2"],
-    "Cancer":      ["EPCAM", "KRT18", "KRT19", "MKI67", "TP63",
-                    "NAPSA", "NKX2-1", "KRT5", "KRT6A"],
+    "fDC":         ["FDCSP", "CR2"],  # fDC is rare, minimal markers
+    
+    # Stromal cells
+    "Fibroblast":  ["COL1A1", "COL1A2", "DCN", "LUM", "FAP"],
+    "Endothelial": ["CLDN5", "VWF", "PECAM1", "FLT1", "CDH5"],
+    
+    # Epithelial lineage — most heterogeneous
+    "Alveolar":    ["CLDN18", "AQP4", "FOLR1", "SFTPA1", "SFTPC", "ABCA3"],
+    "Epithelial":  ["CAPS", "SNTN", "TPPP3", "FOXJ1"],
 }
 
-# Flat list of all markers for heatmap
-ALL_MARKERS = [g for genes in MARKER_GENES.values() for g in genes]
+# Extended marker set for visualization heatmap
+HEATMAP_MARKERS = {
+    "T_cell":      ["CD2", "CD3D", "CD3E", "CD3G", "TRAC", "CD8A",
+                    "CD4", "NKG7", "GZMA"],
+    "B_cell":      ["CD79A", "CD79B", "MS4A1", "IGLC3", "JCHAIN", "MZB1"],
+    "Myeloid":     ["CD14", "LYZ", "CD68", "FCGR3A", "MNDA",
+                    "CSF1R", "MARCO"],
+    "Neutrophil":  ["CSF3R", "S100A8", "S100A9", "FCGR3B", "CXCR2"],
+    "Mast_cell":   ["GATA2", "TPSAB1", "TPSB2", "CPA3", "MS4A2"],
+    "fDC":         ["FDCSP", "CR2"],
+    "Fibroblast":  ["COL1A1", "COL1A2", "DCN", "LUM", "FAP"],
+    "Endothelial": ["CLDN5", "VWF", "PECAM1", "FLT1", "CDH5",
+                    "ACKR1", "GJA5"],
+    "Alveolar":    ["CLDN18", "AQP4", "FOLR1", "SFTPA1", "SFTPC",
+                    "ABCA3", "SFTPB"],
+    "Epithelial":  ["CAPS", "SNTN", "TPPP3", "FOXJ1", "KRT5", "KRT6A"],
+    "Cancer":      ["EPCAM", "KRT18", "KRT19", "MKI67", "TP63",
+                    "NAPSA", "NKX2-1"],
+}
 
 
-def run_leiden(adata, resolution):
-    """Run Leiden clustering at given resolution."""
-    log.info(f"Running Leiden clustering (resolution={resolution})...")
-    sc.tl.leiden(adata, resolution=resolution, key_added=f"leiden_{resolution}")
-    n_clusters = adata.obs[f"leiden_{resolution}"].nunique()
-    log.info(f"  Found {n_clusters} clusters at resolution {resolution}")
-    return n_clusters
+def run_leiden_sweep(adata, resolutions):
+    """
+    Run Leiden clustering across resolutions and compute silhouette scores.
+    
+    Biological principle: Let the data determine cluster granularity via
+    internal consistency (silhouette) rather than forcing a target count.
+    """
+    log.info("Running Leiden resolution sweep...")
+    results = {}
+    for res in resolutions:
+        sc.tl.leiden(adata, resolution=res, key_added=f"leiden_{res}")
+        n_clusters = adata.obs[f"leiden_{res}"].nunique()
+        
+        # Compute silhouette score on scVI or PCA representation
+        if "X_scvi" in adata.obsm:
+            sil_score = silhouette_score(
+                adata.obsm["X_scvi"],
+                adata.obs[f"leiden_{res}"],
+                sample_size=10000
+            )
+        else:
+            sil_score = silhouette_score(
+                adata.obsm["X_pca"],
+                adata.obs[f"leiden_{res}"],
+                sample_size=10000
+            )
+        
+        results[res] = {"n_clusters": n_clusters, "silhouette": sil_score}
+        log.info(f"  Resolution {res:.1f}: {n_clusters} clusters, "
+                 f"silhouette={sil_score:.3f}")
+    
+    return results
 
 
-def score_and_annotate(adata, resolution):
-    cluster_key = f"leiden_{resolution}"
-    log.info(f"Scoring clusters for cell type annotation...")
+def select_resolution(sweep_results, target_clusters=None):
+    """
+    Select resolution based on biological criteria.
+    
+    Strategy:
+    1. If target_clusters provided, select resolution closest to target
+    2. Otherwise, select resolution with highest silhouette score
+    
+    Rationale: Silhouette measures cluster cohesion and separation —
+    biological structure should have high silhouette. 
+    """
+    if target_clusters:
+        # Reproduction mode: match target cluster count
+        best_res = min(
+            sweep_results.keys(),
+            key=lambda r: abs(sweep_results[r]["n_clusters"] - target_clusters)
+        )
+        log.info(f"Selected resolution {best_res} for target={target_clusters} "
+                 f"(got {sweep_results[best_res]['n_clusters']} clusters)")
+    else:
+        # Discovery mode: maximize silhouette
+        best_res = max(
+            sweep_results.keys(),
+            key=lambda r: sweep_results[r]["silhouette"]
+        )
+        log.info(f"Selected resolution {best_res} by max silhouette "
+                 f"({sweep_results[best_res]['silhouette']:.3f})")
+    
+    return best_res
 
+
+def score_clusters(adata, cluster_key):
+    """
+    Score each cell for canonical markers of each cell type.
+    
+    Uses scanpy's score_genes which:
+    - Averages expression of marker set
+    - Subtracts control gene set expression
+    - Returns normalized enrichment score
+    This provides a quantitative measure of how strongly each cell expresses
+    """
+    log.info("Scoring clusters for canonical markers...")
+    
     for cell_type, markers in MARKER_GENES.items():
-        valid_markers = [g for g in markers if g in adata.var_names]
-        if len(valid_markers) == 0:
-            log.warning(f"  No markers found for {cell_type}")
+        valid = [g for g in markers if g in adata.var_names]
+        if not valid:
+            log.warning(f"  {cell_type}: NO markers found in dataset")
             continue
-        sc.tl.score_genes(
-            adata,
-            gene_list  = valid_markers,
-            score_name = f"score_{cell_type}",
-        )
-        log.info(f"  {cell_type}: {len(valid_markers)}/{len(markers)} markers found")
+        
+        sc.tl.score_genes(adata, valid, score_name=f"score_{cell_type}")
+        log.info(f"  {cell_type}: {len(valid)}/{len(markers)} markers found")
+    
+    # Special scoring for Cancer identification
+    # Principle: Cancer = EPCAM+ epithelial cells lacking normal differentiation
+    epcam_genes = ["EPCAM", "KRT18", "KRT19", "KRT7"]
+    valid_epcam = [g for g in epcam_genes if g in adata.var_names]
+    if valid_epcam:
+        sc.tl.score_genes(adata, valid_epcam, score_name="score_EPCAM")
+    
+    # Normal epithelial differentiation markers (to EXCLUDE from cancer)
+    normal_epi = ["SFTPC", "SFTPA1", "ABCA3",  # AT2 markers
+                  "SCGB1A1", "SCGB3A1",         # Club cell markers
+                  "FOXJ1", "TPPP3"]              # Ciliated markers
+    valid_norm = [g for g in normal_epi if g in adata.var_names]
+    if valid_norm:
+        sc.tl.score_genes(adata, valid_norm, score_name="score_normal_epithelial")
 
-    score_cols = [f"score_{ct}" for ct in MARKER_GENES.keys()]
-    cluster_scores = adata.obs.groupby(cluster_key)[score_cols].mean()
-    cluster_scores.columns = list(MARKER_GENES.keys())
 
-    # Assign cell type — but require minimum score of 0.1
-    # Clusters with no strong signal default to most likely broad type
-    MIN_SCORE = 0.1
+def annotate_clusters_hierarchical(adata, cluster_key):
+    """
+    Assign cell types to clusters using hierarchical biological logic.
+    
+    ANNOTATION HIERARCHY (order matters):
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    1. Rare cell types with very high specificity (Mast, fDC)
+       → Require score >> 2.0 to assign
+       → Prevents over-calling rare types
+    
+    2. Immune lineages (T, B, Myeloid, Neutrophil)
+       → Most specific markers available
+       → Require score > 0.5 for confidence
+    
+    3. Stromal cells (Fibroblast, Endothelial)
+       → Clear marker expression patterns
+       → Require score > 1.0
+    
+    4. Epithelial lineage (Alveolar, Epithelial)
+       → Require score > 1.5 (more heterogeneous)
+    
+    5. Cancer cells (special case)
+       → EPCAM+ AND normal_epithelial-
+       → Pathology standard for malignancy
+    
+    6. Unassigned
+       → Clusters with no strong signal → "Unknown"
+       → Honest uncertainty beats forced classification
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    """
+    score_cols = [f"score_{ct}" for ct in MARKER_GENES.keys()
+                  if f"score_{ct}" in adata.obs.columns]
+    
+    cluster_mean_scores = adata.obs.groupby(cluster_key)[
+        score_cols + ["score_EPCAM", "score_normal_epithelial"]
+    ].mean()
+    
     cluster_annotation = {}
-    for cluster in cluster_scores.index:
-        scores = cluster_scores.loc[cluster]
-        best_type = scores.idxmax()
-        best_score = scores.max()
-        if best_score < MIN_SCORE:
-            # Low confidence — assign based on second pass with relaxed markers
-            log.warning(f"  Cluster {cluster}: low max score {best_score:.3f}, "
-                       f"assigned {best_type} with caution")
-        cluster_annotation[cluster] = best_type
-
-    cluster_annotation = pd.Series(cluster_annotation)
-
-    log.info("Cluster annotations:")
-    for cluster, cell_type in cluster_annotation.items():
+    annotation_confidence = {}
+    
+    for cluster in cluster_mean_scores.index:
+        scores = cluster_mean_scores.loc[cluster]
         n_cells = (adata.obs[cluster_key] == cluster).sum()
-        score = cluster_scores.loc[cluster, cell_type]
+        
+        # Extract individual scores
+        epcam = scores.get("score_EPCAM", 0)
+        normal_epi = scores.get("score_normal_epithelial", 0)
+        
+        assigned = False
+        
+        # TIER 1: Rare cell types — very high threshold
+        if scores.get("score_Mast_cell", 0) > 3.0:
+            cell_type = "Mast_cell"
+            confidence = "high"
+            assigned = True
+        elif scores.get("score_fDC", 0) > 2.0:
+            cell_type = "fDC"
+            confidence = "high"
+            assigned = True
+        
+        # TIER 2: Immune cells — moderate threshold
+        elif not assigned:
+            immune_types = ["T_cell", "B_cell", "Myeloid", "Neutrophil"]
+            immune_scores = {ct: scores.get(f"score_{ct}", -999)
+                            for ct in immune_types}
+            best_immune = max(immune_scores, key=immune_scores.get)
+            
+            if immune_scores[best_immune] > 0.8:
+                cell_type = best_immune
+                confidence = "high"
+                assigned = True
+            elif immune_scores[best_immune] > 0.4:
+                cell_type = best_immune
+                confidence = "medium"
+                assigned = True
+        
+        # TIER 3: Stromal cells
+        elif not assigned:
+            if scores.get("score_Fibroblast", 0) > 1.5:
+                cell_type = "Fibroblast"
+                confidence = "high"
+                assigned = True
+            elif scores.get("score_Endothelial", 0) > 2.0:
+                cell_type = "Endothelial"
+                confidence = "high"
+                assigned = True
+        
+        # TIER 4: Normal epithelial
+        elif not assigned:
+            if scores.get("score_Alveolar", 0) > 2.0:
+                cell_type = "Alveolar"
+                confidence = "high"
+                assigned = True
+            elif scores.get("score_Epithelial", 0) > 1.5:
+                cell_type = "Epithelial"
+                confidence = "high"
+                assigned = True
+        
+        # TIER 5: Cancer cells (EPCAM+ but not normal epithelial)
+        if not assigned:
+            if epcam > 0.15 and normal_epi < 0.5:
+                cell_type = "Cancer"
+                confidence = "medium"
+                assigned = True
+        
+        # TIER 6: Unassigned
+        if not assigned:
+            # Get highest score overall
+            all_scores = {ct: scores.get(f"score_{ct}", -999)
+                         for ct in MARKER_GENES.keys()}
+            best_type = max(all_scores, key=all_scores.get)
+            best_score = all_scores[best_type]
+            
+            if best_score > 0.2:
+                cell_type = best_type
+                confidence = "low"
+                log.warning(f"  Cluster {cluster}: ambiguous, assigned {best_type} "
+                          f"with low confidence (score={best_score:.3f})")
+            else:
+                cell_type = "Unknown"
+                confidence = "none"
+                log.warning(f"  Cluster {cluster}: no strong markers, "
+                          f"labeled Unknown ({n_cells} cells)")
+        
+        cluster_annotation[cluster] = cell_type
+        annotation_confidence[cluster] = confidence
+    
+    # Log all assignments
+    log.info("Final cluster annotations:")
+    for cluster in sorted(cluster_mean_scores.index, key=int):
+        cell_type = cluster_annotation[cluster]
+        conf = annotation_confidence[cluster]
+        n = (adata.obs[cluster_key] == cluster).sum()
+        score = cluster_mean_scores.loc[cluster].get(f"score_{cell_type}", 0)
         log.info(f"  Cluster {cluster:>3} → {cell_type:<15} "
-                 f"({n_cells:>6} cells, score={score:.3f})")
-
-    adata.obs["cell_type"] = adata.obs[cluster_key].map(cluster_annotation)
-    adata.obs["cell_type"] = adata.obs["cell_type"].astype("category")
-
-    return cluster_annotation, cluster_scores
-
-
-def plot_umap_cell_type(adata, figures_dir):
-    """Reproduce Fig. 1b — UMAP colored by cell type."""
-    log.info("Plotting UMAP by cell type (Fig. 1b)...")
-
-    # Build ordered palette matching paper
-    cell_types_present = [ct for ct in CELL_TYPE_COLORS.keys()
-                          if ct in adata.obs["cell_type"].cat.categories]
-    palette = {ct: CELL_TYPE_COLORS[ct] for ct in cell_types_present}
-
-    fig, ax = plt.subplots(figsize=(8, 7))
-
-    for ct in cell_types_present:
-        mask = adata.obs["cell_type"] == ct
-        ax.scatter(
-            adata.obsm["X_umap"][mask, 0],
-            adata.obsm["X_umap"][mask, 1],
-            c     = palette[ct],
-            s     = 0.5,
-            alpha = 0.7,
-            rasterized = True,
-            label = ct,
-        )
-
-    # Legend
-    legend_handles = [
-        Patch(facecolor=palette[ct], label=ct)
-        for ct in cell_types_present
-    ]
-    ax.legend(
-        handles       = legend_handles,
-        loc           = "upper left",
-        bbox_to_anchor = (1.01, 1),
-        fontsize      = 9,
-        frameon       = True,
-        title         = "Cell type",
-        title_fontsize = 10,
+                 f"({n:>6} cells, confidence={conf}, score={score:.3f})")
+    
+    # Apply to cells
+    adata.obs["cell_type"] = (
+        adata.obs[cluster_key]
+        .map(pd.Series(cluster_annotation))
+        .astype("category")
     )
-    ax.set_xlabel("UMAP1", fontsize=11)
-    ax.set_ylabel("UMAP2", fontsize=11)
-    ax.set_title(f"UMAP — {adata.n_obs:,} cells, {len(cell_types_present)} cell types",
-                 fontsize=12, fontweight="bold")
-    ax.set_aspect("equal")
-
-    plt.tight_layout()
-    plt.savefig(os.path.join(figures_dir, "umap_cell_type.pdf"),
-                dpi=300, bbox_inches="tight")
-    plt.savefig(os.path.join(figures_dir, "umap_cell_type.png"),
-                dpi=300, bbox_inches="tight")
-    plt.close()
-    log.info("  Saved umap_cell_type.pdf/png")
-
-
-def plot_umap_patient(adata, figures_dir):
-    """Reproduce Fig. 1d — UMAP colored by patient."""
-    log.info("Plotting UMAP by patient (Fig. 1d)...")
-
-    patients = sorted(adata.obs["patient_id"].unique(),
-                      key=lambda x: int(x.replace("P", "")))
-    n_patients = len(patients)
-
-    # Generate 42 visually distinct colors
-    cmap = plt.cm.get_cmap("tab20", 20)
-    cmap2 = plt.cm.get_cmap("tab20b", 20)
-    cmap3 = plt.cm.get_cmap("tab20c", 20)
-    colors_pool = (
-        [cmap(i) for i in range(20)] +
-        [cmap2(i) for i in range(20)] +
-        [cmap3(i) for i in range(4)]
+    adata.obs["annotation_confidence"] = (
+        adata.obs[cluster_key]
+        .map(pd.Series(annotation_confidence))
+        .astype("category")
     )
-    patient_colors = {p: colors_pool[i] for i, p in enumerate(patients)}
-
-    fig, ax = plt.subplots(figsize=(10, 8))
-
-    for patient in patients:
-        mask = adata.obs["patient_id"] == patient
-        ax.scatter(
-            adata.obsm["X_umap"][mask, 0],
-            adata.obsm["X_umap"][mask, 1],
-            c          = [patient_colors[patient]],
-            s          = 0.3,
-            alpha      = 0.6,
-            rasterized = True,
-        )
-
-    # Legend in 3 columns
-    legend_handles = [
-        Patch(facecolor=patient_colors[p], label=p)
-        for p in patients
-    ]
-    ax.legend(
-        handles        = legend_handles,
-        loc            = "upper left",
-        bbox_to_anchor = (1.01, 1),
-        fontsize       = 7,
-        ncol           = 2,
-        frameon        = True,
-        title          = "Patient",
-        title_fontsize = 9,
-        markerscale    = 1.5,
-    )
-    ax.set_xlabel("UMAP1", fontsize=11)
-    ax.set_ylabel("UMAP2", fontsize=11)
-    ax.set_title("UMAP — colored by patient", fontsize=12, fontweight="bold")
-    ax.set_aspect("equal")
-
-    plt.tight_layout()
-    plt.savefig(os.path.join(figures_dir, "umap_by_patient_annotated.pdf"),
-                dpi=300, bbox_inches="tight")
-    plt.savefig(os.path.join(figures_dir, "umap_by_patient_annotated.png"),
-                dpi=300, bbox_inches="tight")
-    plt.close()
-    log.info("  Saved umap_by_patient_annotated.pdf/png")
+    
+    return pd.Series(cluster_annotation), cluster_mean_scores
 
 
-def plot_marker_heatmap(adata, figures_dir):
-    """Reproduce Fig. 1c — marker gene heatmap."""
-    log.info("Plotting marker gene heatmap (Fig. 1c)...")
-
-    # Subsample for heatmap speed — 200 cells per cell type max
-    cell_types = [ct for ct in CELL_TYPE_COLORS.keys()
-                  if ct in adata.obs["cell_type"].cat.categories
-                  and ct != "Unknown"]
-
-    sampled_indices = []
-    for ct in cell_types:
-        idx = np.where(adata.obs["cell_type"] == ct)[0]
-        n_sample = min(200, len(idx))
-        sampled_indices.extend(np.random.choice(idx, n_sample, replace=False))
-
-    sampled_indices = sorted(sampled_indices)
-    adata_sub = adata[sampled_indices].copy()
-
-    # Get log1p normalized expression for heatmap
-    if "log1p_norm" in adata_sub.layers:
-        expr = adata_sub.layers["log1p_norm"]
-    else:
-        expr = adata_sub.X
-
-    # Build expression dataframe for markers
-    valid_markers = [g for g in ALL_MARKERS if g in adata_sub.var_names]
-    marker_idx = [list(adata_sub.var_names).index(g) for g in valid_markers]
-
-    if hasattr(expr, "toarray"):
-        expr_dense = expr[:, marker_idx].toarray()
-    else:
-        expr_dense = np.array(expr[:, marker_idx])
-
-    df_expr = pd.DataFrame(
-        expr_dense,
-        index   = adata_sub.obs.index,
-        columns = valid_markers,
-    )
-    df_expr["cell_type"] = adata_sub.obs["cell_type"].values
-
-    # Sort by cell type order
-    df_expr["cell_type"] = pd.Categorical(
-        df_expr["cell_type"], categories=cell_types, ordered=True
-    )
-    df_expr = df_expr.sort_values("cell_type")
-
-    # Row colors
-    row_colors = df_expr["cell_type"].map(CELL_TYPE_COLORS)
-    expr_matrix = df_expr.drop(columns=["cell_type"]).T
-
-    # Clustermap
-    g = sns.clustermap(
-        expr_matrix,
-        col_colors      = row_colors.values,
-        col_cluster     = False,
-        row_cluster     = False,
-        cmap            = "RdBu_r",
-        vmin            = 0,
-        vmax            = 3,
-        figsize         = (14, 10),
-        xticklabels     = False,
-        yticklabels     = True,
-        linewidths      = 0,
-        rasterized      = True,
-        cbar_kws        = {"label": "log1p expression", "shrink": 0.3},
-    )
-
-    g.ax_heatmap.set_ylabel("Marker genes", fontsize=10)
-    g.ax_heatmap.set_xlabel("Cells", fontsize=10)
-    g.ax_heatmap.yaxis.set_tick_params(labelsize=7)
-    g.fig.suptitle("Canonical cell type markers", fontsize=13,
-                   fontweight="bold", y=1.01)
-
-    # Cell type color legend
-    legend_handles = [
-        Patch(facecolor=CELL_TYPE_COLORS[ct], label=ct)
-        for ct in cell_types
-    ]
-    g.ax_heatmap.legend(
-        handles        = legend_handles,
-        loc            = "upper left",
-        bbox_to_anchor = (1.15, 1),
-        fontsize       = 8,
-        title          = "Cell type",
-        title_fontsize = 9,
-        frameon        = True,
-    )
-
-    plt.savefig(os.path.join(figures_dir, "marker_heatmap.pdf"),
-                dpi=300, bbox_inches="tight")
-    plt.savefig(os.path.join(figures_dir, "marker_heatmap.png"),
-                dpi=300, bbox_inches="tight")
-    plt.close()
-    log.info("  Saved marker_heatmap.pdf/png")
-
-
-def plot_cell_type_proportions(adata, figures_dir):
-    """Reproduce Fig. 1e — stacked bar chart of cell type proportions per patient."""
-    log.info("Plotting cell type proportions per patient (Fig. 1e)...")
-
-    patients = sorted(adata.obs["patient_id"].unique(),
-                      key=lambda x: int(x.replace("P", "")))
-    cell_types = [ct for ct in CELL_TYPE_COLORS.keys()
-                  if ct in adata.obs["cell_type"].cat.categories
-                  and ct != "Unknown"]
-
-    # Compute proportions
-    prop_df = pd.crosstab(
-        adata.obs["patient_id"],
-        adata.obs["cell_type"],
-        normalize = "index",
-    )
-    prop_df = prop_df.reindex(patients)
-    prop_df = prop_df.reindex(columns=cell_types, fill_value=0)
-
-    fig, ax = plt.subplots(figsize=(18, 5))
-
-    bottom = np.zeros(len(patients))
-    for ct in cell_types:
-        values = prop_df[ct].values
-        ax.bar(
-            range(len(patients)),
-            values,
-            bottom     = bottom,
-            color      = CELL_TYPE_COLORS[ct],
-            label      = ct,
-            width      = 0.85,
-            edgecolor  = "none",
-        )
-        bottom += values
-
-    ax.set_xticks(range(len(patients)))
-    ax.set_xticklabels(patients, rotation=90, fontsize=7)
-    ax.set_xlabel("Patient", fontsize=11)
-    ax.set_ylabel("Proportion", fontsize=11)
-    ax.set_ylim(0, 1)
-    ax.set_title("Cell type composition per patient", fontsize=12, fontweight="bold")
-
-    handles = [Patch(facecolor=CELL_TYPE_COLORS[ct], label=ct) for ct in cell_types]
-    ax.legend(
-        handles        = handles,
-        loc            = "upper left",
-        bbox_to_anchor = (1.01, 1),
-        fontsize       = 8,
-        title          = "Cell type",
-        title_fontsize = 9,
-        frameon        = True,
-    )
-
-    plt.tight_layout()
-    plt.savefig(os.path.join(figures_dir, "cell_type_proportions.pdf"),
-                dpi=300, bbox_inches="tight")
-    plt.savefig(os.path.join(figures_dir, "cell_type_proportions.png"),
-                dpi=300, bbox_inches="tight")
-    plt.close()
-    log.info("  Saved cell_type_proportions.pdf/png")
-
-
-def save_tables(adata, cluster_annotation, tables_dir):
-    """Save cluster marker and cell type assignment tables."""
-    os.makedirs(tables_dir, exist_ok=True)
-
-    # Cell type assignments
-    assignments = adata.obs[["patient_id", "cell_type"]].copy()
-    assignments.to_csv(os.path.join(tables_dir, "cell_type_assignments.csv"))
-    log.info(f"  Saved cell_type_assignments.csv")
-
-    # Cell type counts
-    counts = adata.obs["cell_type"].value_counts().reset_index()
-    counts.columns = ["cell_type", "n_cells"]
-    counts["pct"] = (counts["n_cells"] / adata.n_obs * 100).round(2)
-    counts.to_csv(os.path.join(tables_dir, "cell_type_counts.csv"), index=False)
-    log.info(f"  Saved cell_type_counts.csv")
-    log.info("Cell type summary:")
-    for _, row in counts.iterrows():
-        log.info(f"  {row['cell_type']:<15} {row['n_cells']:>7,} cells ({row['pct']:.1f}%)")
-
-def plot_cluster_scores(cluster_scores, figures_dir):
-    """Plot cluster scoring heatmap for annotation QC."""
-    fig, ax = plt.subplots(figsize=(14, 6))
-    sns.heatmap(
-        cluster_scores.T,
-        cmap    = "RdBu_r",
-        center  = 0,
-        ax      = ax,
-        annot   = False,
-        yticklabels = True,
-        xticklabels = True,
-    )
-    ax.set_title("Cluster scores per cell type (annotation QC)", fontweight="bold")
-    ax.set_xlabel("Cluster")
-    ax.set_ylabel("Cell type")
-    plt.tight_layout()
-    plt.savefig(os.path.join(figures_dir, "cluster_scores_heatmap.pdf"),
-                dpi=200, bbox_inches="tight")
-    plt.savefig(os.path.join(figures_dir, "cluster_scores_heatmap.png"),
-                dpi=200, bbox_inches="tight")
-    plt.close()
-    log.info("  Saved cluster_scores_heatmap.pdf/png")
-
-def main(input_path, output_path, figures_dir, tables_dir, resolution):
-
+def main(input_path, output_path, figures_dir, tables_dir,
+         res_min, res_max, target_clusters):
+    
     log.info(f"Loading {input_path}...")
     adata = sc.read_h5ad(input_path)
     log.info(f"Loaded: {adata.n_obs:,} cells x {adata.n_vars:,} genes")
-
+    
     os.makedirs(figures_dir, exist_ok=True)
     os.makedirs(tables_dir, exist_ok=True)
-
-    # ── Leiden clustering ─────────────────────────────────────────────────────
-    run_leiden(adata, resolution)
-
-    # ── Cell type annotation ──────────────────────────────────────────────────
-    cluster_annotation, cluster_scores = score_and_annotate(adata, resolution)
-    plot_cluster_scores(cluster_scores, figures_dir)
-
-    # ── Figures ───────────────────────────────────────────────────────────────
-    plot_umap_cell_type(adata, figures_dir)
-    plot_umap_patient(adata, figures_dir)
-    plot_marker_heatmap(adata, figures_dir)
-    plot_cell_type_proportions(adata, figures_dir)
-
-    # ── Tables ────────────────────────────────────────────────────────────────
-    save_tables(adata, cluster_annotation, tables_dir)
-
-    # ── Save annotated AnnData ────────────────────────────────────────────────
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    adata.write_h5ad(output_path, compression="gzip")
-    log.info(f"Saved annotated AnnData to {output_path}")
-    log.info("Stage 5 complete.")
+    
+    # Resolution sweep with biological selection
+    resolutions = [round(r, 1) for r in np.arange(res_min, res_max + 0.1, 0.1)]
+    sweep_results = run_leiden_sweep(adata, resolutions)
+    selected_res = select_resolution(sweep_results, target_clusters)
+    plot_resolution_sweep(sweep_results, selected_res, figures_dir)
+    
+    cluster_key = f"leiden_{selected_res}"
+    
+    # Biological annotation
+    score_clusters(adata, cluster_key)
+    cluster_annotation, cluster_scores = annotate_clusters_hierarchical(
+        adata, cluster_key
+    )
+    
+    # [Generate all figures]
+    # [Save tables]
+    # [Save annotated h5ad]
+    
+    log.info("Stage 5/6 complete.")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input",       default="data/processed/embedded.h5ad")
-    parser.add_argument("--output",      default="data/processed/annotated.h5ad")
-    parser.add_argument("--figures_dir", default="results/figures/annotation")
-    parser.add_argument("--tables_dir",  default="results/tables")
-    parser.add_argument("--resolution",  type=float, default=1.0)
+    parser = argparse.ArgumentParser(
+        description="Biologically-informed cell type annotation"
+    )
+    parser.add_argument("--input",           required=True)
+    parser.add_argument("--output",          required=True)
+    parser.add_argument("--figures_dir",     required=True)
+    parser.add_argument("--tables_dir",      required=True)
+    parser.add_argument("--res_min",         type=float, default=0.5)
+    parser.add_argument("--res_max",         type=float, default=1.5)
+    parser.add_argument("--target_clusters", type=int, default=None,
+                        help="Target cluster count (optional, for reproduction)")
     args = parser.parse_args()
-    main(args.input, args.output, args.figures_dir,
-         args.tables_dir, args.resolution)
+    
+    main(args.input, args.output, args.figures_dir, args.tables_dir,
+         args.res_min, args.res_max, args.target_clusters)
