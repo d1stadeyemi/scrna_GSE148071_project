@@ -1,15 +1,18 @@
 """
-Stage 4b — scVI Integration and Batch Correction
+Stage 4b — scVI Integration (Alternative Track Only)
 
-Input:  data/processed/normalized.h5ad
-Output: data/processed/scvi_integrated.h5ad
-        models/scvi_model/
+scVI (single-cell Variational Inference) models each cell's gene expression
+as a function of:
+  1. Biological variation (latent variables z)
+  2. Technical variation (batch = patient_id)
 
-Steps:
-- Set up scVI model using raw counts + patient_id as batch key
-- Train on GPU if available, fallback to CPU
-- Extract latent representation (adata.obsm['X_scvi'])
-- Save trained model for reproducibility
+The latent space z is batch-free and used for UMAP/clustering.
+
+If a trained model already exists at model_dir, it is loaded instead
+of retraining. This allows the post-training steps (latent extraction,
+h5ad save) to rerun quickly without GPU.
+
+Reference: Lopez et al. 2018 (Nature Methods)
 """
 
 import os
@@ -21,6 +24,7 @@ warnings.filterwarnings("ignore")
 import numpy as np
 import scanpy as sc
 import scvi
+import torch
 
 logging.basicConfig(
     level   = logging.INFO,
@@ -33,71 +37,88 @@ log = logging.getLogger(__name__)
 def main(input_path, output_path, model_dir,
          n_latent, n_epochs, batch_size):
 
-    log.info(f"Loading {input_path}...")
+    log.info(f"[ALTERNATIVE TRACK] Loading {input_path}...")
     adata = sc.read_h5ad(input_path)
-    log.info(f"Loaded: {adata.n_obs:,} cells x {adata.n_vars:,} genes")
+    log.info(f"  Loaded: {adata.n_obs:,} cells x {adata.n_vars:,} genes")
+
+    # Device logging
+    log.info(f"  PyTorch: {torch.__version__}")
+    log.info(f"  CUDA available: {torch.cuda.is_available()}")
+    if torch.cuda.is_available():
+        log.info(f"  GPU: {torch.cuda.get_device_name(0)}")
+    else:
+        log.info("  Running on CPU (training will take ~60-90 min)")
 
     # ── Subset to HVGs for scVI ───────────────────────────────────────────────
+    # scVI trains on HVGs only — reduces noise, speeds training
     adata_hvg = adata[:, adata.var["highly_variable"]].copy()
-    log.info(f"Using {adata_hvg.n_vars:,} HVGs for scVI")
+    log.info(f"  HVG subset: {adata_hvg.n_vars:,} genes")
 
-    # ── Set up scVI model ─────────────────────────────────────────────────────
-    log.info("Setting up scVI model...")
+    # ── Setup scVI ────────────────────────────────────────────────────────────
     scvi.model.SCVI.setup_anndata(
         adata_hvg,
-        layer      = "counts",       # raw counts required
-        batch_key  = "patient_id",   # batch correction across 42 patients
+        layer     = "counts",       # raw counts required by scVI's NB model
+        batch_key = "patient_id",   # 42 patients as batches
     )
 
-    model = scvi.model.SCVI(
-        adata_hvg,
-        n_latent = n_latent,
-        n_layers = 2,
-        n_hidden = 128,
-    )
+    # ── Load or train ─────────────────────────────────────────────────────────
+    model_pt = os.path.join(model_dir, "model.pt")
 
-    log.info(f"Model architecture:")
-    log.info(f"  n_latent: {n_latent}")
-    log.info(f"  n_layers: 2")
-    log.info(f"  n_hidden: 128")
-    log.info(f"  batch_key: patient_id")
+    if os.path.exists(model_pt):
+        log.info(f"  Found existing model at {model_dir} — loading...")
+        model = scvi.model.SCVI.load(model_dir, adata=adata_hvg)
+        log.info("  Model loaded.")
+    else:
+        log.info("  No existing model — training from scratch...")
+        model = scvi.model.SCVI(
+            adata_hvg,
+            n_latent = n_latent,
+            n_layers = 2,
+            n_hidden = 128,
+        )
+        log.info(f"  Architecture: n_latent={n_latent}, n_layers=2, n_hidden=128")
+        log.info(f"  Batch key: patient_id ({adata_hvg.obs['patient_id'].nunique()} batches)")
 
-    # ── Train ─────────────────────────────────────────────────────────────────
-    log.info("Training scVI model...")
-    model.train(
-        max_epochs          = n_epochs,
-        batch_size          = batch_size,
-        early_stopping      = True,
-        early_stopping_patience = 10,
-        plan_kwargs         = {"lr": 1e-3},
-    )
+        model.train(
+            max_epochs              = n_epochs,
+            batch_size              = batch_size,
+            early_stopping          = True,
+            early_stopping_patience = 10,
+            plan_kwargs             = {"lr": 1e-3},
+        )
+        log.info("  Training complete.")
 
-    log.info("Training complete.")
-    log.info(f"  Final ELBO: {model.history['elbo_train'].values[-1]}")
+        # Log final ELBO
+        try:
+            elbo = float(model.history["elbo_train"].values[-1].flat[0])
+            log.info(f"  Final train ELBO: {elbo:.4f}")
+        except Exception:
+            log.info("  ELBO not available from history")
+
+        os.makedirs(model_dir, exist_ok=True)
+        model.save(model_dir, overwrite=True)
+        log.info(f"  Model saved to {model_dir}")
 
     # ── Extract latent representation ─────────────────────────────────────────
-    log.info("Extracting scVI latent representation...")
+    log.info("  Extracting latent representation...")
     latent = model.get_latent_representation()
     adata.obsm["X_scvi"] = latent
-    log.info(f"  Latent shape: {latent.shape}")
+    log.info(f"  X_scvi shape: {latent.shape}")
 
-    # ── Save model ────────────────────────────────────────────────────────────
-    os.makedirs(model_dir, exist_ok=True)
-    model.save(model_dir, overwrite=True)
-    log.info(f"Model saved to {model_dir}")
-
-    # ── Save AnnData ──────────────────────────────────────────────────────────
+    # ── Save ──────────────────────────────────────────────────────────────────
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     adata.write_h5ad(output_path, compression="gzip")
-    log.info(f"Saved integrated AnnData to {output_path}")
-    log.info("Stage 4b complete.")
+    log.info(f"  Saved to {output_path}")
+    log.info("Stage 4b [alternative] complete.")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input",      default="data/processed/normalized.h5ad")
-    parser.add_argument("--output",     default="data/processed/scvi_integrated.h5ad")
-    parser.add_argument("--model_dir",  default="models/scvi_model")
+    parser = argparse.ArgumentParser(
+        description="scVI integration for alternative track"
+    )
+    parser.add_argument("--input",      required=True)
+    parser.add_argument("--output",     required=True)
+    parser.add_argument("--model_dir",  required=True)
     parser.add_argument("--n_latent",   type=int, default=30)
     parser.add_argument("--n_epochs",   type=int, default=400)
     parser.add_argument("--batch_size", type=int, default=128)

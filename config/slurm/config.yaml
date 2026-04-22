@@ -1,0 +1,16 @@
+# SLURM executor profile for ISAAC HPC (UTK)
+# Account: ACF-UTK0011
+# Available partitions: campus, campus-bigmem, campus-gpu, long, short
+
+executor: slurm
+jobs: 50
+use-conda: true
+rerun-incomplete: true
+printshellcmds: true
+latency-wait: 60
+
+default-resources:
+  mem_mb:          4000
+  runtime:         30
+  slurm_account:   ACF-UTK0011
+  slurm_partition: campus

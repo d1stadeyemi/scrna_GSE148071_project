@@ -1,57 +1,60 @@
+# ── Download: Fetch raw data from GEO ────────────────────────────────────────
+# GSE148071 — Wu et al. 2021 NSCLC scRNA-seq
+# 42 samples, HiSeq X Ten, 10x-like Singleron GEXSCOPE protocol
+
 rule download_raw_tar:
     input:
-        "logs/.setup_done"         
+        "logs/.setup_done"
     output:
-        f"{config['paths']['raw_dir']}/GSE148071_RAW.tar"
+        temp("data/raw/GSE148071_RAW.tar")
     params:
         url = config["geo"]["base_url"] + config["files"]["raw_tar"]
-    threads: 2
-    resources: 
-        mem_mb = 4000,
-        runtime = 60
+    resources:
+        mem_mb          = 4000,
+        runtime         = 120,
+        slurm_partition = "campus"
     log:
         "logs/download_raw_tar.log"
     shell:
         """
-        wget -q --show-progress -O {output} {params.url} > {log} 2>&1
+        wget -q --show-progress \
+            -O {output} \
+            {params.url} \
+            2>&1 | tee {log}
+        echo "Download complete: $(du -sh {output} | cut -f1)" >> {log}
         """
+
 
 rule extract_raw_tar:
     input:
         "data/raw/GSE148071_RAW.tar"
     output:
-        directory("data/raw/extracted/")
+        directory("data/raw/matrices")
+    resources:
+        mem_mb          = 4000,
+        runtime         = 30,
+        slurm_partition = "campus"
     log:
         "logs/extract_raw_tar.log"
     shell:
         """
-        mkdir -p data/raw/extracted
-        tar -xvf {input} -C data/raw/extracted 2> {log}
+        mkdir -p {output}
+        tar -xf {input} -C {output} 2>&1 | tee {log}
+        echo "Extracted $(ls {output}/*.gz | wc -l) files" >> {log}
         """
 
-rule inventory_files:
-    input:
-        "data/raw/extracted/"
-    output:
-        "data/raw/inventory.txt"
-    log:
-        "logs/inventory_files.log"
-    shell:
-        """
-        find data/raw/extracted -type f | sort > {output} 2> {log}
-        """
 
 rule download_series_matrix:
     input:
         "logs/.setup_done"
     output:
-        "data/metadata/GSE148071_series_matrix.txt.gz"
+        "data/raw/GSE148071_series_matrix.txt.gz"
     params:
         url = config["geo"]["matrix_url"]
-    threads: 1
     resources:
-        mem_mb  = 2000,
-        runtime = 20
+        mem_mb          = 2000,
+        runtime         = 20,
+        slurm_partition = "campus"
     log:
         "logs/download_series_matrix.log"
     shell:
@@ -62,15 +65,22 @@ rule download_series_matrix:
             2>&1 | tee {log}
         """
 
+
 rule parse_series_matrix:
+    """
+    Extract patient metadata from GEO series matrix.
+    GEO only provides age and gender for this dataset.
+    Clinical metadata (histology, mutation, smoking) is in Supplementary Table 1
+    of the paper (PDF only, not machine-readable from GEO).
+    """
     input:
-        "data/metadata/GSE148071_series_matrix.txt.gz"
+        "data/raw/GSE148071_series_matrix.txt.gz"
     output:
-        "data/metadata/sample_metadata.tsv"
-    threads: 1
+        "data/metadata/geo_metadata.tsv"
     resources:
-        mem_mb  = 4000,
-        runtime = 10
+        mem_mb          = 4000,
+        runtime         = 10,
+        slurm_partition = "campus"
     log:
         "logs/parse_series_matrix.log"
     shell:

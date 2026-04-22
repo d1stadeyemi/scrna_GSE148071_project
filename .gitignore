@@ -1,43 +1,37 @@
-cat > .gitignore << 'EOF'
-# Large data files
-data/raw/*.tar
-data/raw/extracted/
-data/raw/inventory.txt
-
-# Generated outputs
+# ── Large data files (never commit) ──────────────────────────────────────────
+data/raw/
 data/processed/
-data/metadata/
+models/
+logs/
 results/figures/
 results/tables/
-
-# Logs
-logs/
 .snakemake/
+notebooks/
+resources/
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-.ipynb_checkpoints/
-
-# Conda
-.conda/
-
-# Cluster config (HPC-specific)
-config/slurm/
-
-# scVI model artifacts
-models/
-
-# Keep directory structure
+# ── Keep directory placeholders ───────────────────────────────────────────────
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/processed/paper_track/.gitkeep
+!data/processed/alternative_track/.gitkeep
 !data/metadata/.gitkeep
+!models/.gitkeep
+!logs/.gitkeep
+!logs/paper_track/.gitkeep
+!logs/alternative_track/.gitkeep
 !results/figures/.gitkeep
 !results/tables/.gitkeep
-!logs/.gitkeep
-!resources/.gitkeep
-!notebooks/.gitkeep
-!scripts/.gitkeep
-!models/.gitkeep
-EOF
+!results/tables/paper_track/.gitkeep
+!results/tables/alternative_track/.gitkeep
+
+# ── Metadata is small and manually curated — always track ────────────────────
+!data/metadata/patient_metadata.tsv
+!data/metadata/geo_metadata.tsv
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store

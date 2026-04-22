@@ -1,38 +1,59 @@
+# =============================================================================
+# GSE148071 scRNA-seq Pipeline Configuration
+# Wu et al. 2021 — Advanced NSCLC Tumor Microenvironment
+# =============================================================================
+
+# --- GEO Data ---
 geo:
-  accession: GSE148071
-  base_url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE148nnn/GSE148071/suppl/
+  accession:  GSE148071
+  base_url:   https://ftp.ncbi.nlm.nih.gov/geo/series/GSE148nnn/GSE148071/suppl/
   matrix_url: https://ftp.ncbi.nlm.nih.gov/geo/series/GSE148nnn/GSE148071/matrix/GSE148071_series_matrix.txt.gz
 
 files:
-  raw_tar: GSE148071_RAW.tar
+  raw_tar:       GSE148071_RAW.tar
   series_matrix: GSE148071_series_matrix.txt.gz
 
 paths:
   raw_dir: data/raw
 
+# --- QC Thresholds (from Wu et al. 2021 Methods) ---
+# "We removed cells that had either lower than 200 or higher than 5000
+#  expressed genes... mitochondria content higher than 30%"
 qc:
-  min_genes:  200     # remove empty/dying cells
-  max_genes:  5000    # remove likely doublets (according to the publication)
-  max_pct_mt: 30      # remove dying cells (according to the publication)
-  min_cells:  3       # remove genes expressed in fewer than 3 cells
+  min_genes:  200
+  max_genes:  5000
+  max_pct_mt: 30.0
+  min_cells:  3
 
-# Track A — paper-faithful (no batch correction)
+# --- Paper Track (no batch correction, faithful to publication) ---
+# Follows Wu et al. 2021 Methods exactly:
+# "Seurat 2.3 FindVariable function to select top 600 variable genes"
+# "first 20 principle components and resolution 1.0"
+# "opted out the batch effect correction algorithm"
 paper_track:
-  n_hvgs:        600       # paper's exact value
-  hvg_flavor:    "seurat"  # paper's Seurat 2.3 method
-  n_pcs:         20        # paper uses first 20 PCs
+  n_hvgs:        600
+  hvg_flavor:    "seurat"     # Seurat 2.3 equivalent
+  n_pcs:         20
   n_neighbors:   15
-  batch_correct: false
+  use_rep:       "X_pca"      # No batch correction — use PCA directly
 
-# Track B — modern best practice (scVI)
+# --- Alternative Track (modern best practice with scVI) ---
+# Uses modern methods for comparison and to demonstrate batch correction impact
 alternative_track:
   n_hvgs:        3000
-  hvg_flavor:    "seurat_v3"
-  n_latent:      30
+  hvg_flavor:    "seurat_v3"  # Variance-stabilising, batch-aware
+  n_pcs:         50
+  n_latent:      30           # scVI latent dimensions
   n_epochs:      400
   batch_size:    128
   n_neighbors:   15
-  batch_correct: true
+  use_rep:       "X_scvi"     # scVI latent space
 
+# --- Clustering and Annotation ---
+# target_clusters: paper reports 37 clusters at resolution 1.0
+# We sweep resolutions and select biologically using silhouette + cluster count
 annotation:
-  resolution: 1.0
+  res_min:          0.5
+  res_max:          1.5
+  target_clusters:  37       # paper's reported cluster count
+  min_cells_per_cluster: 50  # discard clusters smaller than this

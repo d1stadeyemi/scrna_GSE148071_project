@@ -19,4 +19,6 @@ dependencies:
   - leidenalg
   - python-igraph
   - scikit-misc        
-  - numba              
+  - numba     
+  - scikit-learn        
+  - h5py       

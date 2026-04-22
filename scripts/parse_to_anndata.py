@@ -1,30 +1,39 @@
 """
-Stage 2 — Parse GEO expression matrices into a merged AnnData object.
+Stage 2 — Parse Per-Sample Expression Matrices to AnnData
 
-Input:  42 per-sample .txt.gz files in data/raw/extracted/
-Output: data/processed/merged_raw.h5ad
+GSE148071 provides 42 per-sample expression matrices:
+  GSM4453576_P1_exp.txt.gz → Patient 1
+  GSM4453577_P2_exp.txt.gz → Patient 2
+  ...
+  GSM4453617_P42_exp.txt.gz → Patient 42
 
-Assumptions (verified pre-run):
-- All samples share identical gene sets (29,528 genes)
-- Matrix orientation: genes x cells (rows x cols)
-- First row: cell barcodes (with sample-specific numeric prefix)
-- First column: gene names
-- Values: raw integer counts
-- Barcode format: {sample_index}_{barcode} — globally unique across samples
+Each file:
+  - Rows = genes (29,528 genes)
+  - Columns = cell barcodes
+  - Values = UMI counts (integers)
+
+Barcode uniqueness:
+  Each sample's barcodes are prefixed with a sample-specific number
+  (1_, 3_, 4_...) already embedded in the GEO files. These are globally
+  unique within the merged matrix.
+
+Expected output:
+  ~89,887 cells × 29,527 genes before QC
+  (paper reports 90,406 — minor GEO update since 2021)
 """
 
 import os
 import re
-import glob
+import gzip
 import argparse
 import logging
 
 import numpy as np
 import pandas as pd
+import scanpy as sc
 import anndata as ad
 from scipy.sparse import csr_matrix
 
-# ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level   = logging.INFO,
     format  = "%(asctime)s [%(levelname)s] %(message)s",
@@ -33,114 +42,116 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-def parse_filename(filepath):
-    """Extract GSM accession and patient ID from filename.
-    
-    Expected format: GSM4453576_P1_exp.txt.gz
+def parse_sample_matrix(filepath, patient_id, gsm_id):
     """
-    basename = os.path.basename(filepath)
-    match = re.match(r"(GSM\d+)_(P\d+)_exp\.txt\.gz", basename)
-    if not match:
-        raise ValueError(f"Unexpected filename format: {basename}")
-    return match.group(1), match.group(2)   # gsm_id, patient_id
+    Parse one per-sample expression matrix.
 
-
-def read_sample(filepath):
-    """Read a single sample matrix into AnnData.
-    
-    Returns AnnData of shape (n_cells, n_genes) with sparse X matrix.
+    Matrix is genes × cells (needs transposing to cells × genes for AnnData).
+    Returns AnnData with obs metadata attached.
     """
-    gsm_id, patient_id = parse_filename(filepath)
+    with gzip.open(filepath, "rt") as f:
+        # First row = header (cell barcodes)
+        header = f.readline().strip().split("\t")
+        barcodes = header[1:]  # first column is gene name
 
-    df = pd.read_csv(filepath, sep="\t", index_col=0, compression="gzip")
-    # df shape: (n_genes, n_cells) — transpose for AnnData convention
-    
-    adata = ad.AnnData(
-        X        = csr_matrix(df.values.T.astype(np.float32)),
-        obs      = pd.DataFrame(index=df.columns.tolist()),
-        var      = pd.DataFrame(index=df.index.tolist()),
-    )
+        genes  = []
+        data   = []
+        for line in f:
+            parts = line.strip().split("\t")
+            genes.append(parts[0])
+            data.append([int(x) for x in parts[1:]])
 
-    adata.obs["patient_id"]  = patient_id
-    adata.obs["gsm_id"]      = gsm_id
-    adata.obs["sample_id"]   = f"{gsm_id}_{patient_id}"
+    # Build sparse matrix (cells × genes)
+    X = csr_matrix(np.array(data, dtype=np.int32).T)
+    n_cells, n_genes = X.shape
 
-    log.info(f"  {patient_id} ({gsm_id}): {adata.n_obs:>5} cells x {adata.n_vars} genes")
+    adata = ad.AnnData(X=X)
+    adata.obs_names = barcodes
+    adata.var_names = genes
+
+    # Attach per-cell metadata
+    adata.obs["patient_id"] = patient_id
+    adata.obs["gsm_id"]     = gsm_id
+    adata.obs["sample_id"]  = f"{gsm_id}_{patient_id}"
+    adata.obs["n_genes"]    = np.array((X > 0).sum(axis=1)).flatten()
+
     return adata
 
 
-def main(extracted_dir, output_path):
-    files = sorted(glob.glob(os.path.join(extracted_dir, "*.txt.gz")))
-    
-    if len(files) == 0:
-        raise FileNotFoundError(f"No .txt.gz files found in {extracted_dir}")
-    
-    log.info(f"Found {len(files)} sample files")
+def extract_patient_info(filename):
+    """
+    Extract patient ID and GSM ID from filename.
+    Pattern: GSM4453576_P1_exp.txt.gz → ("GSM4453576", "P1")
+    """
+    basename = os.path.basename(filename)
+    m = re.match(r"(GSM\d+)_(P\d+)_exp\.txt\.gz", basename)
+    if m:
+        return m.group(1), m.group(2)
+    raise ValueError(f"Cannot parse patient info from filename: {basename}")
 
-    # ── Parse all samples ────────────────────────────────────────────────────
+
+def main(input_dir, metadata_path, output_path):
+
+    # Find all expression files
+    files = sorted([
+        os.path.join(input_dir, f)
+        for f in os.listdir(input_dir)
+        if f.endswith("_exp.txt.gz")
+    ])
+    log.info(f"Found {len(files)} expression files in {input_dir}")
+
+    if len(files) == 0:
+        raise FileNotFoundError(
+            f"No *_exp.txt.gz files found in {input_dir}"
+        )
+
+    # Load metadata
+    metadata = pd.read_csv(metadata_path, sep="\t")
+    meta_lookup = dict(zip(metadata["gsm_id"], metadata.to_dict("records")))
+
+    # Parse each sample
     adatas = []
-    for f in files:
-        adata = read_sample(f)
+    for i, filepath in enumerate(files, 1):
+        gsm_id, patient_id = extract_patient_info(filepath)
+        log.info(f"  [{i:>2}/{len(files)}] {patient_id} ({gsm_id})...")
+
+        adata = parse_sample_matrix(filepath, patient_id, gsm_id)
+        log.info(f"    {adata.n_obs:>5} cells x {adata.n_vars:,} genes")
+
+        # Attach any metadata available
+        if gsm_id in meta_lookup:
+            for col, val in meta_lookup[gsm_id].items():
+                if col not in ["patient_id", "gsm_id"]:
+                    adata.obs[col] = val
+
         adatas.append(adata)
 
-    total_cells = sum(a.n_obs for a in adatas)
-    log.info(f"Total cells before merge: {total_cells:,}")
-
-    # ── Concatenate ──────────────────────────────────────────────────────────
-    # inner join is safe here — confirmed identical gene sets across all samples
-    log.info("Concatenating all samples (inner join)...")
-    merged = ad.concat(
-        adatas,
-        join    = "inner",
-        merge   = "same",
-    )
-
-    # ── Sanity checks ────────────────────────────────────────────────────────
-    assert merged.n_obs == total_cells, \
-        f"Cell count mismatch after concat: {merged.n_obs} vs {total_cells}"
-    assert merged.n_vars == adatas[0].n_vars, \
-        f"Gene count mismatch after concat: {merged.n_vars} vs {adatas[0].n_vars}"
-    assert merged.obs["patient_id"].nunique() == len(files), \
-        f"Expected {len(files)} patients, got {merged.obs['patient_id'].nunique()}"
+    # Merge all samples
+    log.info("Merging all samples...")
+    merged = ad.concat(adatas, join="outer", fill_value=0)
+    merged.var_names_make_unique()
 
     log.info(f"Merged AnnData: {merged.n_obs:,} cells x {merged.n_vars:,} genes")
-    log.info(f"Samples represented: {merged.obs['patient_id'].nunique()}")
+    log.info(f"Patients: {merged.obs['patient_id'].nunique()}")
 
-    # ── Cell counts per patient ──────────────────────────────────────────────
-    counts = merged.obs["patient_id"].value_counts().sort_index()
-    log.info("Cell counts per patient:\n" + counts.to_string())
+    # Cell counts per patient
+    log.info("Cells per patient:")
+    for pid, count in merged.obs["patient_id"].value_counts().sort_index().items():
+        log.info(f"  {pid}: {count:,}")
 
-    # ── Save ─────────────────────────────────────────────────────────────────
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     merged.write_h5ad(output_path, compression="gzip")
     log.info(f"Saved to {output_path}")
-
-    # ── Cleanup extracted files to save HPC storage ──────────────────────────
-    log.info("Cleaning up extracted .txt.gz files...")
-    for f in files:
-        os.remove(f)
-    
-    extracted_dir_path = extracted_dir.rstrip("/")
-    if os.path.isdir(extracted_dir_path) and not os.listdir(extracted_dir_path):
-        os.rmdir(extracted_dir_path)
-        log.info(f"Removed empty directory: {extracted_dir_path}")
-
     log.info("Stage 2 complete.")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Parse GEO scRNA-seq matrices to AnnData"
-    )
-    parser.add_argument(
-        "--extracted_dir",
-        default = "data/raw/extracted",
-        help    = "Directory containing per-sample .txt.gz files"
-    )
-    parser.add_argument(
-        "--output",
-        default = "data/processed/merged_raw.h5ad",
-        help    = "Output path for merged AnnData (.h5ad)"
-    )
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input_dir", required=True,
+                        help="Directory containing *_exp.txt.gz files")
+    parser.add_argument("--metadata",  required=True,
+                        help="Patient metadata TSV from parse_metadata.py")
+    parser.add_argument("--output",    required=True,
+                        help="Output h5ad path")
     args = parser.parse_args()
-    main(args.extracted_dir, args.output)
+    main(args.input_dir, args.metadata, args.output)

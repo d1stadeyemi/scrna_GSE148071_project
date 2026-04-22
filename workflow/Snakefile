@@ -1,16 +1,41 @@
+"""
+GSE148071 scRNA-seq Reproduction Pipeline
+Wu et al. 2021 — Advanced NSCLC Tumor Microenvironment
+
+Two parallel analysis tracks:
+  - paper_track:       No batch correction, 600 HVGs — faithful to publication
+  - alternative_track: scVI batch correction, 3000 HVGs — modern best practice
+
+Both tracks share:
+  - Raw data download and parsing (Stages 1-2)
+  - QC filtering (Stage 3)
+  - Annotation script with biological logic
+
+Run with:
+  snakemake --profile config/slurm/ -n          # dry run
+  snakemake --profile config/slurm/             # full run
+  snakemake --profile config/slurm/ --until paper_cluster_annotate  # up to annotation
+"""
+
 configfile: "config/config.yaml"
 
 include: "rules/setup.smk"
 include: "rules/download.smk"
 include: "rules/parse.smk"
 include: "rules/qc.smk"
-include: "rules/paper_track.smk"    # Track A — no batch correction
-include: "rules/alternative_track.smk"   # Track B — scVI
+include: "rules/paper_track.smk"
+include: "rules/alternative_track.smk"
 include: "rules/annotate.smk"
+include: "rules/compare.smk"
+
 
 rule all:
     input:
-        # Track A is primary — according to the paper, this is the "main" analysis 
-        "data/processed/paper_track/annotated.h5ad",
-        # Track B is comparative — modern best practice with batch correction using scVI
-        "data/processed/alternative_track/annotated.h5ad"
+        # Primary outputs — paper track annotation
+        paper_annotated   = "data/processed/paper_track/annotated.h5ad",
+        # Comparison track annotation
+        alt_annotated     = "data/processed/alternative_track/annotated.h5ad",
+        # Track comparison report
+        comparison_report = "results/figures/comparison/track_comparison.pdf",
+        # Patient metadata
+        metadata          = "data/metadata/geo_metadata.tsv",
