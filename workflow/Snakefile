@@ -1,6 +1,6 @@
 """
 GSE148071 scRNA-seq Reproduction Pipeline
-Wu et al. 2021 — Advanced NSCLC Tumor Microenvironment
+Wu et al. 2021 — Advanced NSCLC Tumor Microenvironment.
 
 Two parallel analysis tracks:
   - paper_track:       No batch correction, 600 HVGs — faithful to publication
