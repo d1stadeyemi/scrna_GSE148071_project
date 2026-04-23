@@ -38,4 +38,4 @@ rule all:
         # Track comparison report
         comparison_report = "results/figures/comparison/track_comparison.pdf",
         # Patient metadata
-        metadata          = "data/metadata/geo_metadata.tsv",
+        metadata          = "data/metadata/geo_metadata.tsv"

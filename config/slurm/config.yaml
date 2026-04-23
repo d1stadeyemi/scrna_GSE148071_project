@@ -1,7 +1,3 @@
-# SLURM executor profile for ISAAC HPC (UTK)
-# Account: ACF-UTK0011
-# Available partitions: campus, campus-bigmem, campus-gpu, long, short
-
 executor: slurm
 jobs: 50
 use-conda: true
