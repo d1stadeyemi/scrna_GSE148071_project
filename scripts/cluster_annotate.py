@@ -649,24 +649,34 @@ def plot_marker_heatmap(adata, figures_dir, track):
 def plot_dotplot(adata, figures_dir, track):
     """Dotplot of representative markers per cell type."""
     log.info("  Plotting marker dotplot...")
-    cell_types = [ct for ct in CELL_TYPE_COLORS
-                  if ct in adata.obs["cell_type"].cat.categories
-                  and ct != "Unknown"]
-
+    
+    # Get cell types actually present, including Unknown
+    cell_types_present = [ct for ct in adata.obs["cell_type"].cat.categories
+                          if ct != "Unknown"]
+    
     rep = {
         "T_cell": "CD3D", "B_cell": "CD79A", "Myeloid": "CD68",
         "Neutrophil": "S100A8", "Mast_cell": "TPSAB1", "fDC": "FDCSP",
         "Fibroblast": "COL1A1", "Endothelial": "PECAM1",
         "Alveolar": "SFTPC", "Epithelial": "CAPS", "Cancer": "EPCAM",
     }
-    valid_ct = [ct for ct in cell_types if rep.get(ct) in adata.var_names]
+    
+    # Only include cell types that are present AND have a valid marker
+    valid_ct = [ct for ct in cell_types_present
+                if rep.get(ct) in adata.var_names]
     markers  = [rep[ct] for ct in valid_ct]
-
+    
+    if not valid_ct:
+        log.warning("  No valid markers for dotplot — skipping")
+        return
+    
+    # Subset adata to exclude Unknown for cleaner plot
+    adata_sub = adata[adata.obs["cell_type"] != "Unknown"].copy()
+    
     ax = sc.pl.dotplot(
-        adata,
+        adata_sub,
         var_names        = markers,
         groupby          = "cell_type",
-        categories_order = valid_ct,
         standard_scale   = "var",
         return_fig       = True,
         show             = False,

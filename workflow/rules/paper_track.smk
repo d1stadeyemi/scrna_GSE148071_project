@@ -36,8 +36,8 @@ rule paper_normalize_hvg:
     threads: 8
     resources:
         mem_mb          = 64000,
-        runtime         = 30,
-        slurm_partition = "campus-bigmem"
+        runtime         = 60,
+        slurm_partition = "campus"
     conda:
         "../envs/scvi.yaml"
     log:
@@ -79,8 +79,8 @@ rule paper_umap_embed:
     threads: 8
     resources:
         mem_mb          = 64000,
-        runtime         = 30,
-        slurm_partition = "campus-bigmem"
+        runtime         = 60,
+        slurm_partition = "campus"
     conda:
         "../envs/scvi.yaml"
     log:
@@ -121,8 +121,8 @@ rule paper_cluster_annotate:
     threads: 8
     resources:
         mem_mb          = 64000,
-        runtime         = 90,
-        slurm_partition = "campus-bigmem"
+        runtime         = 150,
+        slurm_partition = "campus"
     conda:
         "../envs/scvi.yaml"
     log:

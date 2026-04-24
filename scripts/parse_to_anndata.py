@@ -44,37 +44,41 @@ log = logging.getLogger(__name__)
 
 def parse_sample_matrix(filepath, patient_id, gsm_id):
     """
-    Parse one per-sample expression matrix.
-
-    Matrix is genes × cells (needs transposing to cells × genes for AnnData).
-    Returns AnnData with obs metadata attached.
+    Parse one per-sample expression matrix using pandas.
+    Format varies slightly across GEO submissions — pandas handles edge cases
+    more robustly than manual line parsing.
+    
+    Matrix orientation: genes x cells (rows=genes, cols=cells)
+    Output: cells x genes AnnData
     """
-    with gzip.open(filepath, "rt") as f:
-        # First row = header (cell barcodes)
-        header = f.readline().strip().split("\t")
-        barcodes = header[1:]  # first column is gene name
-
-        genes  = []
-        data   = []
-        for line in f:
-            parts = line.strip().split("\t")
-            genes.append(parts[0])
-            data.append([int(x) for x in parts[1:]])
-
-    # Build sparse matrix (cells × genes)
-    X = csr_matrix(np.array(data, dtype=np.int32).T)
-    n_cells, n_genes = X.shape
-
+    import pandas as pd
+    
+    log.info(f"    Reading {os.path.basename(filepath)}...")
+    
+    # Read with pandas — handles variable whitespace, empty first fields, etc.
+    df = pd.read_csv(
+        filepath,
+        sep        = "\t",
+        index_col  = 0,    # first column = gene names
+        compression = "gzip",
+    )
+    
+    # df is now genes x cells — transpose to cells x genes
+    genes    = df.index.tolist()
+    barcodes = df.columns.tolist()
+    
+    log.info(f"    {len(genes):,} genes x {len(barcodes):,} cells")
+    
+    X = csr_matrix(df.values.T.astype(np.int32))
+    
     adata = ad.AnnData(X=X)
     adata.obs_names = barcodes
     adata.var_names = genes
-
-    # Attach per-cell metadata
+    
     adata.obs["patient_id"] = patient_id
     adata.obs["gsm_id"]     = gsm_id
     adata.obs["sample_id"]  = f"{gsm_id}_{patient_id}"
-    adata.obs["n_genes"]    = np.array((X > 0).sum(axis=1)).flatten()
-
+    
     return adata
 
 
