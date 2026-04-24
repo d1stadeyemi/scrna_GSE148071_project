@@ -372,32 +372,40 @@ def annotate_clusters(adata, cluster_key, min_cells=50):
 
         # ── Tier 5: Cancer cells ──────────────────────────────────────────────
         # EPCAM+ but not expressing normal epithelial differentiation markers
-        # This is the pathological definition of malignant epithelium
+        # Lower threshold — EMT cancer cells can have reduced EPCAM
         elif "score_EPCAM" in scores.index and "score_normal_epithelial" in scores.index:
             epcam = float(scores["score_EPCAM"])
             normal_epi = float(scores["score_normal_epithelial"])
 
-            if epcam > 0.15 and normal_epi < 0.5:
+            # Standard: EPCAM+ and not normal epithelial
+            if epcam > 0.1 and normal_epi < 0.5:
                 cell_type = "Cancer"
-                confidence = "high" if epcam > 0.3 else "medium"
+                confidence = "high" if epcam > 0.25 else "medium"
 
         # ── Tier 6: Unknown ───────────────────────────────────────────────────
         if cell_type is None:
-            # Last resort: best scoring type with low confidence
             all_scores = {ct: get(ct) for ct in MARKER_GENES}
             best_ct = max(all_scores, key=all_scores.get)
             best_sc = all_scores[best_ct]
 
-            if best_sc > 0.15:
+            # If no strong immune/stromal signal → likely cancer by exclusion
+            # This follows paper's logic: cancer clusters negative for all other markers
+            immune_stromal_max = max(
+                get("T_cell"), get("B_cell"), get("Myeloid"),
+                get("Neutrophil"), get("Fibroblast"), get("Endothelial"),
+                get("Mast_cell"), get("fDC")
+            )
+            if immune_stromal_max < 0.3 and best_sc < 0.5:
+                cell_type = "Cancer"
+                confidence = "low"
+                log.info(f"  Cluster {cluster}: assigned Cancer by exclusion "
+                        f"(no immune/stromal signal, n={n_cells})")
+            elif best_sc > 0.15:
                 cell_type = best_ct
                 confidence = "low"
-                log.warning(f"  Cluster {cluster}: ambiguous → {best_ct} "
-                             f"(best score={best_sc:.3f}, n={n_cells})")
             else:
                 cell_type = "Unknown"
                 confidence = "none"
-                log.warning(f"  Cluster {cluster}: no signal → Unknown "
-                             f"(best score={best_sc:.3f}, n={n_cells})")
 
         cluster_annotation[cluster] = cell_type
         cluster_confidence[cluster] = confidence
