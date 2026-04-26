@@ -657,43 +657,44 @@ def plot_marker_heatmap(adata, figures_dir, track):
 def plot_dotplot(adata, figures_dir, track):
     """Dotplot of representative markers per cell type."""
     log.info("  Plotting marker dotplot...")
-    
-    # Get cell types actually present, including Unknown
-    cell_types_present = [ct for ct in adata.obs["cell_type"].cat.categories
-                          if ct != "Unknown"]
-    
-    rep = {
-        "T_cell": "CD3D", "B_cell": "CD79A", "Myeloid": "CD68",
-        "Neutrophil": "S100A8", "Mast_cell": "TPSAB1", "fDC": "FDCSP",
-        "Fibroblast": "COL1A1", "Endothelial": "PECAM1",
-        "Alveolar": "SFTPC", "Epithelial": "CAPS", "Cancer": "EPCAM",
-    }
-    
-    # Only include cell types that are present AND have a valid marker
-    valid_ct = [ct for ct in cell_types_present
-                if rep.get(ct) in adata.var_names]
-    markers  = [rep[ct] for ct in valid_ct]
-    
-    if not valid_ct:
-        log.warning("  No valid markers for dotplot — skipping")
-        return
-    
-    # Subset adata to exclude Unknown for cleaner plot
-    adata_sub = adata[adata.obs["cell_type"] != "Unknown"].copy()
-    
-    ax = sc.pl.dotplot(
-        adata_sub,
-        var_names        = markers,
-        groupby          = "cell_type",
-        standard_scale   = "var",
-        return_fig       = True,
-        show             = False,
-        title            = f"[{track}] Representative markers per cell type",
-    )
-    for ext in ["pdf", "png"]:
-        ax.savefig(os.path.join(figures_dir, f"marker_dotplot.{ext}"),
-                   dpi=300, bbox_inches="tight")
-    log.info("  Saved marker_dotplot")
+    try:
+        cell_types_present = [ct for ct in adata.obs["cell_type"].cat.categories
+                              if ct != "Unknown"]
+        rep = {
+            "T_cell": "CD3D", "B_cell": "CD79A", "Myeloid": "CD68",
+            "Neutrophil": "S100A8", "Mast_cell": "TPSAB1", "fDC": "FDCSP",
+            "Fibroblast": "COL1A1", "Endothelial": "PECAM1",
+            "Alveolar": "SFTPC", "Epithelial": "CAPS", "Cancer": "EPCAM",
+        }
+        valid_ct = [ct for ct in cell_types_present
+                    if rep.get(ct) in adata.var_names]
+        markers  = [rep[ct] for ct in valid_ct]
+
+        if not valid_ct:
+            log.warning("  No valid markers for dotplot — skipping")
+            return
+
+        adata_sub = adata[adata.obs["cell_type"].isin(valid_ct)].copy()
+        adata_sub.obs["cell_type"] = (
+            adata_sub.obs["cell_type"]
+            .cat.remove_unused_categories()
+        )
+
+        ax = sc.pl.dotplot(
+            adata_sub,
+            var_names      = markers,
+            groupby        = "cell_type",
+            standard_scale = "var",
+            return_fig     = True,
+            show           = False,
+            title          = f"[{track}] Representative markers per cell type",
+        )
+        for ext in ["pdf", "png"]:
+            ax.savefig(os.path.join(figures_dir, f"marker_dotplot.{ext}"),
+                       dpi=300, bbox_inches="tight")
+        log.info("  Saved marker_dotplot")
+    except Exception as e:
+        log.warning(f"  Dotplot skipped: {e}")
 
 
 def plot_proportions(adata, figures_dir, track):
