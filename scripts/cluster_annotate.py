@@ -769,7 +769,6 @@ def main(input_path, output_path, figures_dir, tables_dir,
     plot_umap_cell_type(adata, figures_dir, track)
     plot_umap_patient(adata, figures_dir, track)
     plot_marker_heatmap(adata, figures_dir, track)
-    plot_dotplot(adata, figures_dir, track)
     plot_proportions(adata, figures_dir, track)
 
     # ── Tables ────────────────────────────────────────────────────────────────
