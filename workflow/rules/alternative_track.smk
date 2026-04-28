@@ -36,8 +36,8 @@ rule alternative_normalize_hvg:
     threads: 8
     resources:
         mem_mb          = 64000,
-        runtime         = 30,
-        slurm_partition = "campus-bigmem"
+        runtime         = 60,
+        slurm_partition = "campus"
     conda:
         "../envs/scvi.yaml"
     log:
@@ -82,8 +82,8 @@ rule alternative_scvi_integrate:
     threads: 16
     resources:
         mem_mb          = 64000,
-        runtime         = 480,
-        slurm_partition = "campus-bigmem"
+        runtime         = 960,
+        slurm_partition = "campus"
     conda:
         "../envs/scvi.yaml"
     log:
@@ -123,8 +123,8 @@ rule alternative_umap_embed:
     threads: 8
     resources:
         mem_mb          = 64000,
-        runtime         = 60,
-        slurm_partition = "campus-bigmem"
+        runtime         = 120,
+        slurm_partition = "campus"
     conda:
         "../envs/scvi.yaml"
     log:
@@ -162,8 +162,8 @@ rule alternative_cluster_annotate:
     threads: 8
     resources:
         mem_mb          = 64000,
-        runtime         = 90,
-        slurm_partition = "campus-bigmem"
+        runtime         = 180,
+        slurm_partition = "campus"
     conda:
         "../envs/scvi.yaml"
     log:
