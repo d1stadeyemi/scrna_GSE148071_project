@@ -24,7 +24,7 @@ rule compare_tracks:
     resources:
         mem_mb          = 64000,
         runtime         = 30,
-        slurm_partition = "campus-bigmem"
+        slurm_partition = "campus"
     conda:
         "../envs/scvi.yaml"
     log:

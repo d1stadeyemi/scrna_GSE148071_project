@@ -162,7 +162,7 @@ rule alternative_cluster_annotate:
     threads: 8
     resources:
         mem_mb          = 64000,
-        runtime         = 180,
+        runtime         = 150,
         slurm_partition = "campus"
     conda:
         "../envs/scvi.yaml"
