@@ -13,7 +13,6 @@ dependencies:
   - seaborn
   - scikit-learn
   - h5py
-  - ktplotspy           # optional: for advanced CNV visualization
   - pip
   - pip:
     - infercnvpy>=0.4.3
