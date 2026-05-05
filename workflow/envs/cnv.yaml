@@ -1,0 +1,19 @@
+name: cnv
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python>=3.9,<3.12
+  - infercnvpy>=0.4.3    # CNV inference from scRNA-seq
+  - scanpy>=1.9
+  - anndata>=0.9
+  - pandas
+  - numpy
+  - scipy
+  - matplotlib
+  - seaborn
+  - leidenalg
+  - python-igraph
+  - scikit-learn
+  - h5py
+  - ktplotspy           # optional: for advanced CNV visualization
