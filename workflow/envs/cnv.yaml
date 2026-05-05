@@ -16,3 +16,4 @@ dependencies:
   - pip
   - pip:
     - infercnvpy>=0.4.3
+    - gtfparse
