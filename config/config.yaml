@@ -57,3 +57,20 @@ annotation:
   res_max:          1.5
   target_clusters:  37       # paper's reported cluster count
   min_cells_per_cluster: 50  # discard clusters smaller than this
+
+# --- Stage 7: CNV Inference ---
+# Reproduces paper Methods: "InferCNV using single-cell transcriptomic profiles"
+# Reference: immune cells + stromal cells (known diploid)
+# Window: 101 genes (paper exact value)
+cnv:
+  # Path to GTF file for gene positions (leave empty to use built-in GRCh38)
+  # If you have the GTF: gtf_path: "/path/to/Homo_sapiens.GRCh38.92.gtf"
+  gtf_path:         ""
+ 
+  # CNV score threshold for malignancy classification
+  # Cells with CNV score above this are classified as confirmed malignant
+  # Lower = more sensitive, Higher = more specific
+  cnv_threshold:    0.03
+ 
+  # Cells per patient in CNV heatmap (paper uses 100)
+  n_cells_heatmap:  100

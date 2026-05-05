@@ -1,20 +1,23 @@
 """
 GSE148071 scRNA-seq Reproduction Pipeline
-Wu et al. 2021 — Advanced NSCLC Tumor Microenvironment.
+Wu et al. 2021 — Advanced NSCLC Tumor Microenvironment
 
 Two parallel analysis tracks:
   - paper_track:       No batch correction, 600 HVGs — faithful to publication
   - alternative_track: scVI batch correction, 3000 HVGs — modern best practice
 
-Both tracks share:
-  - Raw data download and parsing (Stages 1-2)
-  - QC filtering (Stage 3)
-  - Annotation script with biological logic
+Stages:
+  1-2: Download + Parse
+  3:   QC Filtering
+  4:   Normalization, HVG, UMAP (both tracks)
+  5/6: Leiden Clustering + Cell Type Annotation (both tracks)
+  7:   CNV Inference + Malignancy Classification (paper track only)
 
 Run with:
-  snakemake --profile config/slurm/ -n          # dry run
-  snakemake --profile config/slurm/             # full run
-  snakemake --profile config/slurm/ --until paper_cluster_annotate  # up to annotation
+  snakemake --profile config/slurm/ -n              # dry run
+  snakemake --profile config/slurm/                 # full pipeline
+  snakemake --profile config/slurm/ --until paper_cluster_annotate
+  snakemake --profile config/slurm/ --until infer_cnv
 """
 
 configfile: "config/config.yaml"
@@ -32,13 +35,13 @@ include: "rules/cnv.smk"
 
 rule all:
     input:
-        # Primary outputs — paper track annotation
+        # Paper track annotation (primary)
         paper_annotated   = "data/processed/paper_track/annotated.h5ad",
-        # Comparison track annotation
+        # Alternative track annotation (comparison)
         alt_annotated     = "data/processed/alternative_track/annotated.h5ad",
         # Track comparison report
         comparison_report = "results/figures/comparison/track_comparison.pdf",
         # CNV inference (paper track)
         cnv_annotated     = "data/processed/paper_track/cnv_annotated.h5ad",
-        # Patient metadata
-        metadata          = "data/metadata/geo_metadata.tsv"
+        # Metadata
+        metadata          = "data/metadata/geo_metadata.tsv",
