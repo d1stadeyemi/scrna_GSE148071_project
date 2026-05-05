@@ -44,8 +44,8 @@ rule infer_cnv:
     threads: 8
     resources:
         mem_mb          = 128000,        # 128GB — CNV matrix is large
-        runtime         = 180,           # 3 hours to be safe
-        slurm_partition = "campus-bigmem"
+        runtime         = 300,           # 6 hours to be safe
+        slurm_partition = "campus"
     conda:
         "../envs/cnv.yaml"               # separate env with infercnvpy
     log:
