@@ -21,3 +21,15 @@ _Coming soon_
 
 ## See also
 - [reproduction_plan.md](reproduction_plan.md) — detailed analysis plan and scope
+## Required Reference Files
+
+The following files must be downloaded manually before running Stage 7 (CNV inference):
+
+```bash
+mkdir -p resources/genome
+wget -O resources/genome/Homo_sapiens.GRCh38.92.gtf.gz \
+    https://ftp.ensembl.org/pub/release-92/gtf/homo_sapiens/Homo_sapiens.GRCh38.92.gtf.gz
+gunzip resources/genome/Homo_sapiens.GRCh38.92.gtf.gz
+```
+
+This is Ensembl GRCh38 v92 — the same annotation used by Wu et al. 2021.
