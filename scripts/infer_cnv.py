@@ -146,52 +146,40 @@ def prepare_adata_for_cnv(adata):
 
 def run_infercnv(adata_sub, gtf_path=None):
     """
-    Run infercnvpy CNV inference.
-
-    Parameters matching paper's InferCNV settings (Methods):
-    - window_size=101 genes (paper: "101 genes as slide window")
-    - step=1
-    - reference: immune + stromal cells
-    - Outputs: adata.obsm['X_cnv']
+    Run infercnvpy CNV inference using GTF for gene positions.
+    Paper: window_size=101 genes, immune/stromal reference.
     """
     log.info("Running infercnvpy CNV inference...")
 
     if not HAS_INFERCNVPY:
-        log.error("infercnvpy not installed — cannot run CNV inference")
-        log.error("Add 'infercnvpy' to workflow/envs/scvi.yaml and rebuild env")
         raise ImportError("infercnvpy required for Stage 7")
 
-    # Annotate gene positions
-    # infercnvpy uses gtf or its built-in database
-    if gtf_path:
-        cnv.io.genomic_position_from_gtf(gtf_path, adata_sub, gtf_gene_id="gene_name")
-    else:
-        # Use built-in — matches GRCh38
-        try:
-            cnv.io.genomic_position_from_gtf(
-                "grch38", adata_sub, gtf_gene_id="gene_name"
-            )
-        except Exception:
-            log.warning("  Built-in GTF failed — trying gene symbol lookup")
-            cnv.io.genomic_position_from_gtf(
-                "grch38_110", adata_sub, gtf_gene_id="gene_name"
-            )
+    if not gtf_path or not os.path.exists(gtf_path):
+        raise FileNotFoundError(
+            f"GTF file not found: {gtf_path}\n"
+            "Set cnv.gtf_path in config/config.yaml"
+        )
+
+    log.info(f"  Loading gene positions from GTF: {gtf_path}")
+    cnv.io.genomic_position_from_gtf(
+        gtf_path, adata_sub, gtf_gene_id="gene_name"
+    )
 
     # Filter to genes with position info
-    adata_sub = adata_sub[:, ~adata_sub.var["chromosome"].isnull()].copy()
-    log.info(f"  Genes with position info: {adata_sub.n_vars:,}")
+    has_pos = ~adata_sub.var["chromosome"].isnull()
+    n_with_pos = has_pos.sum()
+    log.info(f"  Genes with position info: {n_with_pos:,} / {adata_sub.n_vars:,}")
+    adata_sub = adata_sub[:, has_pos].copy()
 
-    # Run CNV inference
-    # Paper Methods: "101 genes as a slide window to smooth relative expression"
-    log.info("  Running infercnvpy (window_size=101, step=1)...")
+    log.info("  Running infercnvpy (window_size=101, matching paper)...")
     cnv.tl.infercnv(
         adata_sub,
-        reference_key    = "cnv_label",
-        reference_cat    = "reference",
-        window_size      = 101,
-        step             = 1,
-        n_jobs           = 8,
-        inplace          = True,
+        reference_key = "cnv_label",
+        reference_cat = "reference",
+        window_size   = 101,
+        step          = 1,
+        n_jobs        = 8,
+        inplace       = True,
     )
 
     log.info(f"  CNV matrix shape: {adata_sub.obsm['X_cnv'].shape}")
